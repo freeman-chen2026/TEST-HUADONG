@@ -144,17 +144,19 @@ CREW_COLUMNS = ["姓名", "联系方式", "执照号码", "证件号码"]
 CREW_FILL_COLUMNS_GENERAL = ["职务", "姓名", "性别", "出生日期", "证件号码", "执照号码", "联系方式"]
 CREW_FILL_COLUMNS_EAST = ["职务", "姓名", "性别", "出生日期", "国籍", "证件号码", "执照号码"]
 
+# ★ 更新了所有涉及的国籍三字码
 NATION_MAP = {
-    "CHN": "中国", "HKG": "香港", "DEU": "德国", "USA": "美国", "GBR": "英国",
-    "FRA": "法国", "RUS": "俄罗斯", "JPN": "日本", "KOR": "韩国", "SGP": "新加坡",
-    "MYS": "马来西亚", "THA": "泰国", "VNM": "越南", "PHL": "菲律宾", "IDN": "印度尼西亚",
-    "IND": "印度", "AUS": "澳大利亚", "CAN": "加拿大", "BRA": "巴西", "MEX": "墨西哥",
-    "ZAF": "南非", "EGY": "埃及", "NGA": "尼日利亚", "KEN": "肯尼亚", "TZA": "坦桑尼亚",
-    "ZWE": "津巴布韦", "NLD": "荷兰", "ITA": "意大利", "ESP": "西班牙", "PRT": "葡萄牙",
-    "GRC": "希腊", "TUR": "土耳其", "SAU": "沙特阿拉伯", "ARE": "阿联酋", "ISR": "以色列",
-    "IRN": "伊朗", "PAK": "巴基斯坦", "BGD": "孟加拉", "NPL": "尼泊尔", "LKA": "斯里兰卡",
-    "MMR": "缅甸", "KHM": "柬埔寨", "LAO": "老挝", "MNG": "蒙古", "PRK": "朝鲜",
-    "TWN": "中国台湾", "MAC": "澳门"
+    "CHN": "中国", "HKG": "中国香港", "TWN": "中国台湾省", "MAC": "中国澳门",
+    "DEU": "德国", "USA": "美国", "GBR": "英国", "FRA": "法国", "RUS": "俄罗斯",
+    "JPN": "日本", "KOR": "韩国", "SGP": "新加坡", "MYS": "马来西亚", "THA": "泰国",
+    "VNM": "越南", "PHL": "菲律宾", "IDN": "印度尼西亚", "IND": "印度", "AUS": "澳大利亚",
+    "CAN": "加拿大", "BRA": "巴西", "MEX": "墨西哥", "ZAF": "南非", "EGY": "埃及",
+    "NGA": "尼日利亚", "KEN": "肯尼亚", "TZA": "坦桑尼亚", "ZWE": "津巴布韦",
+    "NLD": "荷兰", "ITA": "意大利", "ESP": "西班牙", "PRT": "葡萄牙", "GRC": "希腊",
+    "TUR": "土耳其", "SAU": "沙特阿拉伯", "ARE": "阿联酋", "ISR": "以色列",
+    "IRN": "伊朗", "PAK": "巴基斯坦", "BGD": "孟加拉", "NPL": "尼泊尔",
+    "LKA": "斯里兰卡", "MMR": "缅甸", "KHM": "柬埔寨", "LAO": "老挝", "MNG": "蒙古",
+    "PRK": "朝鲜", "HUN": "匈牙利",
 }
 
 AIRCRAFT_TYPE_MAP = {
@@ -679,12 +681,13 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
     # 4. 乘客信息（动态找乘客表头）
     passenger_start_row = None
     for row in ws.iter_rows(min_row=1, max_row=100):
-        for cell in row:
-            if cell.value and isinstance(cell.value, str):
-                val = cell.value.strip()
-                if "姓名" in val and "性别" in val and "出生日期" in val:
-                    passenger_start_row = cell.row + 1; break
-        if passenger_start_row: break
+        row_text = "".join([str(c.value).strip() for c in row if c.value])
+        if "姓名" in row_text and "性别" in row_text and "出生日期" in row_text:
+            passenger_start_row = row[0].row + 1
+            break
+        if "乘客信息" in row_text:
+            passenger_start_row = row[0].row + 2
+            break
 
     if passenger_start_row and passenger_list:
         passenger_start_row = _ensure_passenger_rows(ws, passenger_start_row, len(passenger_list))
@@ -788,21 +791,16 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
         if cr and str(cr.get("姓名", "")).strip() not in ("", "无"): _fill_crew_row_by_data(ws, role, cr)
         else: _fill_empty_crew_row(ws, role)
 
-    # 乘客
+    # 乘客 (修复后的动态查找逻辑)
     passenger_start_row = None
     for row in ws.iter_rows(min_row=1, max_row=100):
-        for cell in row:
-            if cell.value and isinstance(cell.value, str):
-                val = cell.value.strip()
-                if "姓名" in val and "性别" in val and "出生日期" in val:
-                    passenger_start_row = cell.row + 1; break
-        if passenger_start_row: break
-    if passenger_start_row is None:
-        for row in ws.iter_rows(min_row=1, max_row=100):
-            for cell in row:
-                if cell.value and isinstance(cell.value, str) and "乘客信息" in cell.value:
-                    passenger_start_row = cell.row + 2; break
-            if passenger_start_row: break
+        row_text = "".join([str(c.value).strip() for c in row if c.value])
+        if "姓名" in row_text and "性别" in row_text and "出生日期" in row_text:
+            passenger_start_row = row[0].row + 1
+            break
+        if "乘客信息" in row_text:
+            passenger_start_row = row[0].row + 2
+            break
 
     if passenger_start_row and passenger_list:
         passenger_start_row = _ensure_passenger_rows(ws, passenger_start_row, len(passenger_list))
@@ -881,6 +879,8 @@ if data_file and template_file:
         role_order = ["机长", "副驾驶", "乘务", "机务"]
         role_rows = {r: None for r in role_order}
         overflow_rows = []
+        
+        has_unknown_nation = False
 
         for idx, crew in enumerate(crew_list):
             name_cn = extract_chinese_name(crew["name"])
@@ -888,12 +888,19 @@ if data_file and template_file:
             lic_val = find_license(crew["name"])
             contact = find_contact(crew["name"])
             
-            # ★ 新的国籍识别逻辑：优先使用 GD 单上的三字码
+            # ★ 新的国籍识别逻辑：优先使用 GD 单上的三字码，如果识别不了直接报错提示
             raw_nat = str(crew.get("nationality", "")).strip().upper()
-            if raw_nat:
-                nation = get_nation_name(raw_nat) # 例如 BRA -> 巴西
+            if raw_nat and raw_nat in NATION_MAP:
+                nation = NATION_MAP[raw_nat]
+            elif raw_nat:
+                nation = f"待核实({raw_nat})"
+                has_unknown_nation = True
             else:
-                nation = "中国" if is_18digit_id_card(id_val) or not id_val else "外籍"
+                if is_18digit_id_card(id_val):
+                    nation = "中国"
+                else:
+                    nation = "待核实"
+                    has_unknown_nation = True
 
             if idx == 0: preferred_role = "机长"
             elif idx == 1: preferred_role = "副驾驶"
@@ -926,6 +933,10 @@ if data_file and template_file:
         if overflow_rows:
             overflow_desc = "、".join(f"{r['姓名']}（当前标为「{r['职务']}」）" for r in overflow_rows)
             st.warning(f"⚠️ **本次机组共 {len(crew_list)} 人**，而模板机组区通常只有 4 行。以下人员**不会自动写入模板**：\n\n**{overflow_desc}**")
+
+        # 弹出红色警告提醒用户去修改
+        if has_unknown_nation and is_east_china:
+            st.error("⚠️ **警告：部分机组人员的国籍未能自动识别，请在下方表格中手动修改！**")
 
         crew_signature = "|".join([c.get("name", "") for c in crew_list])
         editor_key = f"crew_fill_editor_{abs(hash(crew_signature)) % (10**8)}"
