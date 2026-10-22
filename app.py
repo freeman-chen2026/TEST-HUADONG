@@ -55,7 +55,7 @@ BUILTIN_CREW_DATA = [
     ("ROEDER, SIMONE ELKE / SIMONE ELKE ROEDER", "852 6263 4569", "4213276", ""),
     ("王凯珮 / HOI PUI, WONG", "852 6858 8410", "10068", "Z411582(2)"),
     ("马坚 / Jian MA", "189 1770 2918", "320103196607089512", "320103196607089512"),
-    ("卢江 / Jiang LU", "158 0045 6521", "420521198809280021", "420521198809280021"),
+    ("卢江 / Jiang LU", "158 0045 6521", "10302", "420521198809280021"),
     ("孟周聪 / Zhoucong Meng", "135 6434 5029", "10303", "310113198307243215"),
     ("张帆 / Fan ZHANG", "138 0135 1294", "2552356", "211002197306050057"),
     ("魏思远 / Siyuan WEI", "133 2110 4588", "230102198911054315", "230102198911054315"),
@@ -605,19 +605,19 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
     # 1. 飞行性质（第6行，B列）
     safe_set_cell_value(ws, 6, 2, "调机" if not passenger_list else "商务")
     
-    # 2. 飞行信息（第11行，B=机型 C=注册号 D=航班号 E=行程）
-    safe_set_cell_value(ws, 11, 2, data.get("ac_type", ""))
-    safe_set_cell_value(ws, 11, 3, data.get("reg", ""))
-    safe_set_cell_value(ws, 11, 4, data.get("flt", ""))
-    safe_set_cell_value(ws, 11, 5, route_display if route_display else "")
+    # 2. 飞行信息（第10行，B=机型 C=注册号 D=航班号 E=行程）
+    safe_set_cell_value(ws, 10, 2, data.get("ac_type", ""))
+    safe_set_cell_value(ws, 10, 3, data.get("reg", ""))
+    safe_set_cell_value(ws, 10, 4, data.get("flt", ""))
+    safe_set_cell_value(ws, 10, 5, route_display if route_display else "")
     
-    # 3. 机组信息（15-19行）E=国籍，F=证件号码(16号)，G=执照号码(12号)
+    # 3. 机组信息（15-18行）E=国籍，F=证件号码(16号)，G=执照号码(12号)
     role_map = {}
     for cr in crew_rows:
         role = str(cr.get("职务", "")).strip()
         if role and role not in role_map: role_map[role] = cr
 
-    roles_pos = {"机长": 16, "副驾驶": 17, "乘务": 18, "机务": 19}
+    roles_pos = {"机长": 15, "副驾驶": 16, "乘务": 17, "机务": 18}
     for role_name, row_num in roles_pos.items():
         cr = role_map.get(role_name)
         if cr and str(cr.get("姓名", "")).strip() not in ("", "无"):
@@ -843,6 +843,7 @@ if data_file and template_file:
 
         for idx, crew in enumerate(crew_list):
             name_cn = extract_chinese_name(crew["name"])
+            # 去掉之前错误的强行覆盖逻辑，严格按字段读取
             id_val = find_id(crew["name"]) or crew.get("passport_no", "")
             lic_val = find_license(crew["name"])
             contact = find_contact(crew["name"])
