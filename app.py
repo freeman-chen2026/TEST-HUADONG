@@ -753,9 +753,9 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
         else:
             for c in range(2, 8): safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
 
-    # 乘客（★ 总调模板固定从 18 行开始）
+    # 乘客（★ 总调模板固定从 19 行开始）
     if passenger_list:
-        start_row = 18
+        start_row = 19
         passenger_start_row = _ensure_passenger_rows(ws, start_row, len(passenger_list))
         for i, pax in enumerate(passenger_list):
             row_num = passenger_start_row + i
