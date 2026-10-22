@@ -601,7 +601,11 @@ def _ensure_passenger_rows(ws, data_start_row, needed_count):
 # 核心填充逻辑
 # ================================================================
 def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, route_display):
-    wb = load_workbook(template_bytes)
+    try:
+        wb = load_workbook(template_bytes)
+    except Exception as e:
+        raise RuntimeError("❌ 模板文件解析失败。请确保你上传的是真正的 `.xlsx` 格式（请用 Excel 打开文件，选择“另存为”，格式选 Excel 工作簿(*.xlsx)），而不是直接修改后缀名。")
+
     ws = wb.active
     
     # 1. 飞行性质（第6行，B列）
@@ -627,19 +631,25 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
             safe_set_cell_value(ws, row_num, 3, cr.get("性别", ""))
             safe_set_cell_value(ws, row_num, 4, cr.get("出生日期", ""))
             
-            # E列：国籍
+            doc_no = str(cr.get("证件号码", "")).strip()
+            lic_no = str(cr.get("执照号码", "")).strip()
+            
+            # E列：国籍 (根据证件号判断)
             cell_e = ws.cell(row=row_num, column=5)
-            cell_e.value = "中国" if "中国" in str(cr.get("证件号码", "")) else "中国" # 简单填中国
+            if is_18digit_id_card(doc_no) or doc_no == "":
+                cell_e.value = "中国"
+            else:
+                cell_e.value = "外籍"
             cell_e.font = Font(name='宋体', size=16)
             
             # F列：证件号码
             cell_f = ws.cell(row=row_num, column=6)
-            cell_f.value = cr.get("证件号码", "")
+            cell_f.value = doc_no
             cell_f.font = Font(name='宋体', size=16)
             
             # G列：执照号码
             cell_g = ws.cell(row=row_num, column=7)
-            cell_g.value = cr.get("执照号码", "")
+            cell_g.value = lic_no
             cell_g.font = Font(name='宋体', size=12)
         else:
             for c in range(2, 8):
@@ -669,7 +679,11 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
     return output
 
 def fill_template_general(template_bytes, data, crew_rows, passenger_list, route_display):
-    wb = load_workbook(template_bytes)
+    try:
+        wb = load_workbook(template_bytes)
+    except Exception as e:
+        raise RuntimeError("❌ 模板文件解析失败。请确保你上传的是真正的 `.xlsx` 格式（请用 Excel 打开文件，选择“另存为”，格式选 Excel 工作簿(*.xlsx)），而不是直接修改后缀名。")
+
     ws = wb.active
     
     # 飞行目的
@@ -771,7 +785,12 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
     return output
 
 def fill_template(template_bytes, data, crew_rows, passenger_list, route_display):
-    wb = load_workbook(template_bytes)
+    # 尝试直接打开模板判断
+    try:
+        wb = load_workbook(template_bytes)
+    except Exception:
+        raise RuntimeError("❌ 模板文件解析失败。请确保你上传的是真正的 `.xlsx` 格式（请用 Excel 打开文件，选择“另存为”，格式选 Excel 工作簿(*.xlsx)），而不是直接修改后缀名。")
+        
     ws = wb.active
     
     # 智能识别是否为华东区内模板：看第15行第7列(G列)是否为"执照号码"
@@ -783,14 +802,6 @@ def fill_template(template_bytes, data, crew_rows, passenger_list, route_display
         return fill_template_east_china(template_bytes, data, crew_rows, passenger_list, route_display)
     else:
         return fill_template_general(template_bytes, data, crew_rows, passenger_list, route_display)
-
-@st.cache_data(show_spinner=False, max_entries=16)
-def _cached_fill_template(template_bytes, data_json, crew_json, pax_json, route_display):
-    _data = json.loads(data_json)
-    _crew = json.loads(crew_json)
-    _pax = json.loads(pax_json)
-    buf = fill_template(template_bytes, _data, _crew, _pax, route_display)
-    return buf.getvalue()
 
 # ================================================================
 # 页面逻辑
@@ -917,15 +928,11 @@ if data_file and template_file:
         download_file_name = f"{safe_file_name}.xlsx"
 
         try:
-            result_bytes = _cached_fill_template(
-                template_file.getvalue(),
-                json.dumps(data, ensure_ascii=False, default=str),
-                json.dumps(crew_for_template, ensure_ascii=False, default=str),
-                json.dumps(passenger_list, ensure_ascii=False, default=str),
-                route_display,
-            )
-        except Exception:
+            # 直接调用 fill_template，不走缓存，保证每次反映最新数据
             result_bytes = fill_template(template_file, data, crew_for_template, passenger_list, route_display).getvalue()
+        except Exception as e:
+            st.error(f"❌ 生成失败：{e}")
+            st.stop()
 
         st.download_button(
             label="⬇️ 下载填充后的备案表",
@@ -938,6 +945,6 @@ if data_file and template_file:
 
     except Exception as e:
         st.error(f"❌ 处理失败：{e}")
-        st.exception(e)
+        st.stop()
 else:
     st.info("👆 请同时上传 GD单 和 模板文件。")
