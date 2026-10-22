@@ -146,7 +146,7 @@ CREW_FILL_COLUMNS_GENERAL = ["职务", "姓名", "性别", "出生日期", "证�
 CREW_FILL_COLUMNS_EAST = ["职务", "姓名", "性别", "出生日期", "国籍", "证件号码", "执照号码"]
 
 NATION_MAP = {
-    "CHN": "中国", "HKG": "中国香港", "TWN": "中国台湾省", "MAC": "中国澳门",
+    "CHN": "中国", "HKG": "中国香港", "TWN": "中国台湾", "MAC": "中国澳门",
     "DEU": "德国", "USA": "美国", "GBR": "英国", "FRA": "法国", "RUS": "俄罗斯",
     "JPN": "日本", "KOR": "韩国", "SGP": "新加坡", "MYS": "马来西亚", "THA": "泰国",
     "VNM": "越南", "PHL": "菲律宾", "IDN": "印度尼西亚", "IND": "印度", "AUS": "澳大利亚",
@@ -237,6 +237,17 @@ def is_18digit_id_card(val):
     if not val: return False
     s = re.sub(r'\s+', '', str(val))
     return bool(re.match(r'^[0-9]{17}[0-9Xx]$', s))
+
+def resolve_crew_id_and_license(crew_name, fallback_passport=""):
+    """
+    - 18 位身份证（名单里 match 到有效身份证号）→ 执照号也填身份证号
+    - 否则：证件号取名单值，名单为空回退到 GD 单的护照号；执照号取名单值
+    """
+    id_val = find_id(crew_name)
+    license_val = find_license(crew_name)
+    if is_18digit_id_card(id_val):
+        return id_val, id_val
+    return (id_val if id_val else fallback_passport), license_val
 
 def parse_document_type(passport_no, doc_type):
     doc_type_str = str(doc_type).strip() if pd.notna(doc_type) else ""
@@ -568,7 +579,7 @@ def _find_first_content_row(ws, start_row, max_scan=300):
 
 
 # ================================================================
-# ★ 修复后的核心行插入逻辑（对齐第二段代码方案）
+# ★ 修复后的核心行插入逻辑（对齐原第二段代码方案）
 # ================================================================
 def _shift_images_down(ws, end_row, extra):
     """按插入行数平移图片行号，保留原锚点类型（不改变缩放/宽高语义）。"""
@@ -749,6 +760,7 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
         if cr and str(cr.get("姓名", "")).strip() not in ("", "无"):
             name_val = str(cr.get("姓名", "")).strip()
             safe_set_cell_value(ws, row_num, 2, name_val)
+            _style_name_cell(ws, row_num, 2, name_val)       # ← 长名自动缩字 + 换行
             safe_set_cell_value(ws, row_num, 3, cr.get("性别", ""))
             safe_set_cell_value(ws, row_num, 4, cr.get("出生日期", ""))
             safe_set_cell_value(ws, row_num, 5, cr.get("国籍", ""))
@@ -783,6 +795,7 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
             safe_set_cell_value(ws, row_num, 6, pax.get("passport_no", ""))
             for col_idx in range(1, 7):
                 safe_set_cell_font(ws, row_num, col_idx, Font(name='宋体', size=16))
+            _style_name_cell(ws, row_num, 1, pax_name)       # ← 基于 16pt 自动缩字（必须在字体设置之后）
 
     output = BytesIO()
     wb.save(output); output.seek(0)
@@ -929,8 +942,9 @@ if data_file and template_file:
 
         for idx, crew in enumerate(crew_list):
             name_cn = extract_chinese_name(crew["name"])
-            id_val = find_id(crew["name"]) or crew.get("passport_no", "")
-            lic_val = find_license(crew["name"])
+            id_val, lic_val = resolve_crew_id_and_license(
+                crew["name"], crew.get("passport_no", "")
+            )
             contact = find_contact(crew["name"])
 
             raw_nat = str(crew.get("nationality", "")).strip().upper()
