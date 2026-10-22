@@ -46,33 +46,33 @@ BUILTIN_CREW_DATA = [
     ("于龙飞", "156 5288 0812", "ZN00915", "210103198808123928"),
     ("林帅", "138 1156 6711", "110227198601130015", "110227198601130015"),
     ("张佳妮 / Jiani ZHANG", "136 6169 9966", "10183", "31010619840115002X"),
-    ("张欢乐 / Huanle ZHANG", "186 1652 1529", "ZN00883", "330381198705292523"),
+    ("张欢乐 / Huanle ZHANG", "186 1652 1529", "330381198705292523", "330381198705292523"),
     ("昝昭君 / Zhaojun ZAN", "182 9570 0579", "14272419950203313X", "14272419950203313X"),
-    ("孙赫 / He SUN", "186 0102 1216", "4070599", "410102197702243012"),
-    ("李晓龙 / Xiaolong LI", "138 2378 1747", "3781955", "420104197906150015"),
-    ("李卉妍 / Huiyan LI", "138 5142 0321", "10299", ""),
+    ("孙赫 / He SUN", "186 0102 1216", "410102197702243012", "410102197702243012"),
+    ("李晓龙 / Xiaolong LI", "138 2378 1747", "420104197906150015", "420104197906150015"),
+    ("李卉妍 / Huiyan LI", "138 5142 0321", "210106199007051542", "210106199007051542"),
     ("熊立凌 / Liling Xiong", "135 3821 6276", "421003199203222631", "421003199203222631"),
     ("HEALY, Darran William / Darran William HEALY", "852 6891 2350", "3141079", ""),
     ("ROEDER, SIMONE ELKE / SIMONE ELKE ROEDER", "852 6263 4569", "4213276", ""),
     ("王凯珮 / HOI PUI, WONG", "852 6858 8410", "10068", "Z411582(2)"),
     ("马坚 / Jian MA", "189 1770 2918", "320103196607089512", "320103196607089512"),
-    ("卢江 / Jiang LU", "158 0045 6521", "10302", "420521198809280021"),
-    ("孟周聪 / Zhoucong Meng", "135 6434 5029", "10303", "310113198307243215"),
-    ("张帆 / Fan ZHANG", "138 0135 1294", "2552356", "211002197306050057"),
+    ("卢江 / Jiang LU", "158 0045 6521", "420521198809280021", "420521198809280021"),
+    ("孟周聪 / Zhoucong Meng", "135 6434 5029", "310113198307243215", "310113198307243215"),
+    ("张帆 / Fan ZHANG", "138 0135 1294", "211002197306050057", "211002197306050057"),
     ("魏思远 / Siyuan WEI", "133 2110 4588", "230102198911054315", "230102198911054315"),
     ("王晟磊 / Shenglei WANG", "150 2689 7493", "310109198409264012", "310109198409264012"),
     ("Nathon Andrew G, NORBERG / Nathon Andrew G NORBERG", "186 0019 4610", "3050802", "A04700868"),
     ("Keith Robert, SHERREN / Keith Robert SHERREN", "137 3540 9744", "2755204", "P024165FF"),
     ("Rodolfo, BONETTI / Rodolfo BONETTI", "132 6284 1083", "12660", ""),
-    ("危慧 / Hui WEI", "152 1349 1328", "10137", "43072119941115468X"),
+    ("危慧 / Hui WEI", "152 1349 1328", "43072119941115468X", "43072119941115468X"),
     ("李辛欣 / Xinxin LI", "135 5008 8666", "4209424", "510105198605023015"),
     ("Herve Daniel, STAMM / Herve Daniel STAMM", "183 1709 0300", "2666622", "M578620(2)"),
-    ("樊婉程 / Wancheng FAN", "186 2017 4817", "ZN00434", "440106199608180326"),
-    ("刘爽 / Shuang LIU", "138 0125 8789", "4101498", "110108196308296450"),
+    ("樊婉程 / Wancheng FAN", "186 2017 4817", "440106199608180326", "440106199608180326"),
+    ("刘爽 / Shuang LIU", "138 0125 8789", "110108196308296450", "110108196308296450"),
     ("刘凯 / Kai LIU", "135 2157 9157", "2833670", "230103198103275511"),
     ("詹佩佩 / Peipei ZHAN", "137 1440 5925", "10283", "440301198809275123"),
-    ("花佩 / Pei HUA", "186 2631 0634", "ZN00495", "320281198911117761"),
-    ("翁英 / YING WENG", "130 6785 2000", "ZN00905", "330106198801182024"),
+    ("花佩 / Pei HUA", "186 2631 0634", "320281198911117761", "320281198911117761"),
+    ("翁英 / YING WENG", "130 6785 2000", "330106198801182024", "330106198801182024"),
     ("王莹 / Ying WANG", "159 1009 9069", "370125199004215621", "370125199004215621"),
     ("程佳俊 / Jiajun CHENG", "134 8010 3029", "511202198208161358", "511202198208161358"),
     ("蔡雨桐 / Yu Tong CHOI", "852 6426 7445", "10269", "V146532(5)"),
@@ -715,9 +715,8 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
     info_row = None
     for row in ws.iter_rows(min_row=1, max_row=20):
         for cell in row:
-            if cell.value and isinstance(cell.value, str):
-                if cell.value.strip() in ["机型", "注册号", "航班号", "航班行程"]:
-                    info_row = cell.row; break
+            if cell.value and isinstance(cell.value, str) and cell.value.strip() in ["机型", "注册号", "航班号", "航班行程"]:
+                info_row = cell.row; break
         if info_row: break
     
     if info_row:
@@ -725,32 +724,38 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
         safe_set_cell_value(ws, data_row, 2, data.get("ac_type", ""))
         safe_set_cell_value(ws, data_row, 3, data.get("reg", ""))
         safe_set_cell_value(ws, data_row, 4, data.get("flt", ""))
-        safe_set_cell_value(ws, data_row, 5, route_display if route_display else "")
+        
+        route_col = 5
+        for cell in ws[info_row]:
+            if cell.value and "行程" in str(cell.value):
+                route_col = cell.column
+                break
+        safe_set_cell_value(ws, data_row, route_col, route_display if route_display else "")
 
-    # 机组
+    # 机组 (动态找行)
     def _fill_crew_row_by_data(ws, label_keyword, crew_row):
-        for row in ws.iter_rows(min_row=1, max_row=50):
-            for cell in row:
-                if cell.value and isinstance(cell.value, str) and label_keyword in cell.value:
-                    row_num = cell.row
-                    name_text = crew_row.get("姓名", "")
-                    safe_set_cell_value(ws, row_num, 2, name_text)
-                    safe_set_cell_value(ws, row_num, 3, crew_row.get("性别", ""))
-                    safe_set_cell_value(ws, row_num, 4, crew_row.get("出生日期", ""))
-                    safe_set_cell_value(ws, row_num, 5, crew_row.get("证件号码", ""))
-                    safe_set_cell_value(ws, row_num, 6, crew_row.get("执照号码", ""))
-                    safe_set_cell_value(ws, row_num, 7, crew_row.get("联系方式", ""))
-                    _style_name_cell(ws, row_num, 2, name_text)
-                    return True
+        for row in ws.iter_rows(min_row=10, max_row=30):
+            cell = row[0]
+            if cell.value and isinstance(cell.value, str) and cell.value.strip() == label_keyword:
+                row_num = cell.row
+                name_text = crew_row.get("姓名", "")
+                safe_set_cell_value(ws, row_num, 2, name_text)
+                safe_set_cell_value(ws, row_num, 3, crew_row.get("性别", ""))
+                safe_set_cell_value(ws, row_num, 4, crew_row.get("出生日期", ""))
+                safe_set_cell_value(ws, row_num, 5, crew_row.get("证件号码", ""))
+                safe_set_cell_value(ws, row_num, 6, crew_row.get("执照号码", ""))
+                safe_set_cell_value(ws, row_num, 7, crew_row.get("联系方式", ""))
+                _style_name_cell(ws, row_num, 2, name_text)
+                return True
         return False
 
     def _fill_empty_crew_row(ws, label_keyword):
-        for row in ws.iter_rows(min_row=1, max_row=50):
-            for cell in row:
-                if cell.value and isinstance(cell.value, str) and label_keyword in cell.value:
-                    row_num = cell.row
-                    for c in range(2, 8): safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
-                    return True
+        for row in ws.iter_rows(min_row=10, max_row=30):
+            cell = row[0]
+            if cell.value and isinstance(cell.value, str) and cell.value.strip() == label_keyword:
+                row_num = cell.row
+                for c in range(2, 8): safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
+                return True
         return False
 
     role_map = {}
@@ -810,13 +815,14 @@ def fill_template(template_bytes, data, crew_rows, passenger_list, route_display
     ws = wb.active
     
     is_east_china = False
-    for r in range(1, 31):
-        for c in range(1, 10):
-            cell_val = ws.cell(r, c).value
-            if cell_val and "国籍" in str(cell_val):
+    for r in range(1, 30):
+        if ws.cell(r, 1).value == "职务" and ws.cell(r, 2).value == "姓名":
+            e_val = str(ws.cell(r, 5).value or "")
+            if "国籍" in e_val:
                 is_east_china = True
-                break
-        if is_east_china: break
+            else:
+                is_east_china = False
+            break
         
     if is_east_china:
         return fill_template_east_china(template_bytes, data, crew_rows, passenger_list, route_display)
@@ -836,13 +842,14 @@ if data_file and template_file:
         try:
             wb_temp = load_workbook(template_file)
             ws_temp = wb_temp.active
-            for r in range(1, 31):
-                for c in range(1, 10):
-                    cell_val = ws_temp.cell(r, c).value
-                    if cell_val and "国籍" in str(cell_val):
+            for r in range(1, 30):
+                if ws_temp.cell(r, 1).value == "职务" and ws_temp.cell(r, 2).value == "姓名":
+                    e_val = str(ws_temp.cell(r, 5).value or "")
+                    if "国籍" in e_val:
                         is_east_china = True
-                        break
-                if is_east_china: break
+                    else:
+                        is_east_china = False
+                    break
         except:
             pass
 
