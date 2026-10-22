@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-专用：备案表生成（支持总调模板 & 华东区内模板，行号写死版）
+专用：备案表生成（支持总调模板 & 华东区内模板，锁定图片宽高版）
 """
 
 import streamlit as st
@@ -10,6 +10,7 @@ from io import BytesIO
 from openpyxl import load_workbook
 from openpyxl.styles import Font
 from openpyxl.cell.cell import MergedCell
+from openpyxl.drawing.image import Image as OpenpyxlImage
 import re
 import json
 from datetime import datetime, timedelta
@@ -56,23 +57,23 @@ BUILTIN_CREW_DATA = [
     ("ROEDER, SIMONE ELKE / SIMONE ELKE ROEDER", "852 6263 4569", "4213276", ""),
     ("王凯珮 / HOI PUI, WONG", "852 6858 8410", "10068", "Z411582(2)"),
     ("马坚 / Jian MA", "189 1770 2918", "320103196607089512", "320103196607089512"),
-    ("卢江 / Jiang LU", "158 0045 6521", "420521198809280021", "420521198809280021"),
-    ("孟周聪 / Zhoucong Meng", "135 6434 5029", "310113198307243215", "310113198307243215"),
-    ("张帆 / Fan ZHANG", "138 0135 1294", "211002197306050057", "211002197306050057"),
+    ("卢江 / Jiang LU", "158 0045 6521", "10302", "420521198809280021"),
+    ("孟周聪 / Zhoucong Meng", "135 6434 5029", "10303", "310113198307243215"),
+    ("张帆 / Fan ZHANG", "138 0135 1294", "2552356", "211002197306050057"),
     ("魏思远 / Siyuan WEI", "133 2110 4588", "230102198911054315", "230102198911054315"),
     ("王晟磊 / Shenglei WANG", "150 2689 7493", "310109198409264012", "310109198409264012"),
     ("Nathon Andrew G, NORBERG / Nathon Andrew G NORBERG", "186 0019 4610", "3050802", "A04700868"),
     ("Keith Robert, SHERREN / Keith Robert SHERREN", "137 3540 9744", "2755204", "P024165FF"),
     ("Rodolfo, BONETTI / Rodolfo BONETTI", "132 6284 1083", "12660", ""),
-    ("危慧 / Hui WEI", "152 1349 1328", "43072119941115468X", "43072119941115468X"),
+    ("危慧 / Hui WEI", "152 1349 1328", "10137", "43072119941115468X"),
     ("李辛欣 / Xinxin LI", "135 5008 8666", "4209424", "510105198605023015"),
     ("Herve Daniel, STAMM / Herve Daniel STAMM", "183 1709 0300", "2666622", "M578620(2)"),
-    ("樊婉程 / Wancheng FAN", "186 2017 4817", "440106199608180326", "440106199608180326"),
-    ("刘爽 / Shuang LIU", "138 0125 8789", "110108196308296450", "110108196308296450"),
+    ("樊婉程 / Wancheng FAN", "186 2017 4817", "ZN00434", "440106199608180326"),
+    ("刘爽 / Shuang LIU", "138 0125 8789", "4101498", "110108196308296450"),
     ("刘凯 / Kai LIU", "135 2157 9157", "2833670", "230103198103275511"),
     ("詹佩佩 / Peipei ZHAN", "137 1440 5925", "10283", "440301198809275123"),
-    ("花佩 / Pei HUA", "186 2631 0634", "320281198911117761", "320281198911117761"),
-    ("翁英 / YING WENG", "130 6785 2000", "330106198801182024", "330106198801182024"),
+    ("花佩 / Pei HUA", "186 2631 0634", "ZN00495", "320281198911117761"),
+    ("翁英 / YING WENG", "130 6785 2000", "ZN00905", "330106198801182024"),
     ("王莹 / Ying WANG", "159 1009 9069", "370125199004215621", "370125199004215621"),
     ("程佳俊 / Jiajun CHENG", "134 8010 3029", "511202198208161358", "511202198208161358"),
     ("蔡雨桐 / Yu Tong CHOI", "852 6426 7445", "10269", "V146532(5)"),
@@ -565,58 +566,104 @@ def _find_first_content_row(ws, start_row, max_scan=300):
             if v is not None and str(v).strip(): return r
     return None
 
-def _ensure_passenger_rows(ws, data_start_row, needed_count):
+# ★ 改进后的核心行插入逻辑：固定在特定行号插入，并锁定图片大小
+def _ensure_passenger_rows(ws, data_start_row, needed_count, insert_pos):
     if needed_count <= 0: return data_start_row
     from openpyxl.utils import get_column_letter
+
+    # 找到实际需要填充多少行
     end_row = _find_first_content_row(ws, data_start_row)
     if end_row is None: return data_start_row
     existing_rows = end_row - data_start_row
     if needed_count <= existing_rows: return data_start_row
+    
     extra = needed_count - existing_rows
-    template_row = end_row - 1
-    max_col = ws.max_column or 10
-    template_styles = {c: _style_snapshot(ws.cell(template_row, c)) for c in range(1, max_col + 1)}
-    template_height = ws.row_dimensions[template_row].height
+
+    # ★ 保护图片：记录下所有图片的原始宽高和相对位置，然后移出
+    saved_images = []
+    for img in list(getattr(ws, '_images', [])):
+        anchor = getattr(img, 'anchor', None)
+        if anchor is None: continue
+        frm = getattr(anchor, '_from', None)
+        if frm is None: continue
+        saved_images.append({
+            'img': img,
+            'row': frm.row,
+            'col': frm.col,
+            'width': getattr(img, 'width', None),
+            'height': getattr(img, 'height', None)
+        })
+    ws._images = []
+
+    # ★ 记录行高和受影响的行合并
     max_row = ws.max_row
     saved_heights = {}
-    for r in range(end_row, max_row + 1):
+    for r in range(insert_pos, max_row + 1):
         h = ws.row_dimensions[r].height
         if h is not None: saved_heights[r] = h
+
     affected = []
     for mr in list(ws.merged_cells.ranges):
-        if mr.min_row >= end_row or mr.min_row < end_row <= mr.max_row:
+        if mr.min_row >= insert_pos or mr.min_row < insert_pos <= mr.max_row:
             affected.append((mr.min_row, mr.min_col, mr.max_row, mr.max_col))
             try: ws.unmerge_cells(str(mr))
             except: pass
-    ws.insert_rows(end_row, extra)
+
+    # 在指定的插入点（比如 20 行）强行插入
+    ws.insert_rows(insert_pos, extra)
     
+    # 恢复受影响的行高（向下平移）
+    for r in list(ws.row_dimensions.keys()):
+        if r >= insert_pos:
+            try: del ws.row_dimensions[r]
+            except: pass
+    for old_r, h in saved_heights.items():
+        ws.row_dimensions[old_r + extra].height = h
+        
+    # 恢复受影响的合并
     for min_r, min_c, max_r, max_c in affected:
-        if min_r >= end_row: new_min_r, new_max_r = min_r + extra, max_r + extra
+        if min_r >= insert_pos: new_min_r, new_max_r = min_r + extra, max_r + extra
         else: new_min_r, new_max_r = min_r, max_r + extra
         rng = (f"{get_column_letter(min_c)}{new_min_r}:" f"{get_column_letter(max_c)}{new_max_r}")
         try: ws.merge_cells(rng)
         except: pass
-        
-    for r in list(ws.row_dimensions.keys()):
-        if r >= end_row:
-            try: del ws.row_dimensions[r]
-            except: pass
-    for old_r, h in saved_heights.items(): ws.row_dimensions[old_r + extra].height = h
+
+    # 填充新行的格式（复制模板行样式）
+    template_row = insert_pos - 1
+    template_styles = {c: _style_snapshot(ws.cell(template_row, c)) for c in range(1, (ws.max_column or 10) + 1)}
+    template_height = ws.row_dimensions[template_row].height
     
     template_merges = []
     for mr in list(ws.merged_cells.ranges):
         if mr.min_row == template_row and mr.max_row == template_row:
             template_merges.append((mr.min_col, mr.max_col))
-
+            
     for i in range(extra):
-        new_row = end_row + i
+        new_row = insert_pos + i
         for c, snap in template_styles.items(): _style_apply(ws.cell(new_row, c), snap)
         if template_height: ws.row_dimensions[new_row].height = template_height
         for min_c, max_c in template_merges:
             rng = (f"{get_column_letter(min_c)}{new_row}:" f"{get_column_letter(max_c)}{new_row}")
             try: ws.merge_cells(rng)
             except: pass
+
+    # ★ 恢复图片：如果在插入点之下，整体下移。并且锁定原本的宽高，防止拉伸！
+    from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
+    for s in saved_images:
+        img = s['img']
+        row = s['row']
+        col = s['col']
+        if row >= insert_pos - 1:
+            row += extra
             
+        # 强制使用单单元格锚点，尺寸写死，就绝对拉不长了
+        marker = AnchorMarker(col=col, colOff=0, row=row, rowOff=0)
+        anchor = OneCellAnchor(_from=marker, ext=None)
+        anchor.width = s['width']
+        anchor.height = s['height']
+        img.anchor = anchor
+        ws.add_image(img)
+
     return data_start_row
 
 # ================================================================
@@ -639,7 +686,7 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
     safe_set_cell_value(ws, 10, 4, data.get("flt", ""))
     safe_set_cell_value(ws, 10, 5, route_display if route_display else "")
     
-    # 3. 机组信息（★ 华东模板固定从 15 行开始）
+    # 3. 机组信息（华东模板固定从 15 行开始）
     role_map = {}
     for cr in crew_rows:
         role = str(cr.get("职务", "")).strip()
@@ -653,31 +700,26 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
             safe_set_cell_value(ws, row_num, 2, name_val)
             safe_set_cell_value(ws, row_num, 3, cr.get("性别", ""))
             safe_set_cell_value(ws, row_num, 4, cr.get("出生日期", ""))
-            
             safe_set_cell_value(ws, row_num, 5, cr.get("国籍", ""))
             safe_set_cell_font(ws, row_num, 5, Font(name='宋体', size=16))
-            
             safe_set_cell_value(ws, row_num, 6, cr.get("证件号码", ""))
             safe_set_cell_font(ws, row_num, 6, Font(name='宋体', size=16))
-            
             safe_set_cell_value(ws, row_num, 7, cr.get("执照号码", ""))
             safe_set_cell_font(ws, row_num, 7, Font(name='宋体', size=12))
         else:
             for c in range(2, 8):
                 safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
     
-    # 4. 乘客信息（★ 华东模板固定从 23 行开始）
+    # 4. 乘客信息（华东模板从 23 行开始，在第 24 行插入）
     if passenger_list:
         start_row = 23
-        passenger_start_row = _ensure_passenger_rows(ws, start_row, len(passenger_list))
+        insert_pos = 24
+        passenger_start_row = _ensure_passenger_rows(ws, start_row, len(passenger_list), insert_pos)
         for i, pax in enumerate(passenger_list):
             row_num = passenger_start_row + i
             pax_name = extract_chinese_name(pax["name"])
-            
-            try:
-                ws.merge_cells(start_row=row_num, start_column=6, end_row=row_num, end_column=7)
-            except Exception:
-                pass
+            try: ws.merge_cells(start_row=row_num, start_column=6, end_row=row_num, end_column=7)
+            except: pass
                 
             safe_set_cell_value(ws, row_num, 1, pax_name)
             safe_set_cell_value(ws, row_num, 2, pax.get("gender", ""))
@@ -687,7 +729,6 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
             doc_type_clean = parse_document_type("", doc_type) if (pd.notna(doc_type) and str(doc_type).strip()) else parse_document_type(pax.get("passport_no", ""), "")
             safe_set_cell_value(ws, row_num, 5, doc_type_clean)
             safe_set_cell_value(ws, row_num, 6, pax.get("passport_no", ""))
-            
             for col_idx in range(1, 7):
                 safe_set_cell_font(ws, row_num, col_idx, Font(name='宋体', size=16))
 
@@ -724,7 +765,6 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
         safe_set_cell_value(ws, data_row, 2, data.get("ac_type", ""))
         safe_set_cell_value(ws, data_row, 3, data.get("reg", ""))
         safe_set_cell_value(ws, data_row, 4, data.get("flt", ""))
-        
         route_col = 5
         for cell in ws[info_row]:
             if cell.value and "行程" in str(cell.value):
@@ -732,7 +772,7 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
                 break
         safe_set_cell_value(ws, data_row, route_col, route_display if route_display else "")
 
-    # 机组（★ 总调模板固定从 13 行开始）
+    # 机组（总调模板固定从 13 行开始）
     role_map = {}
     for cr in crew_rows:
         role = str(cr.get("职务", "")).strip()
@@ -753,10 +793,11 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
         else:
             for c in range(2, 8): safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
 
-    # 乘客（★ 总调模板固定从 19 行开始）
+    # 乘客（总调模板从 19 行开始，在第 20 行插入）
     if passenger_list:
         start_row = 19
-        passenger_start_row = _ensure_passenger_rows(ws, start_row, len(passenger_list))
+        insert_pos = 20
+        passenger_start_row = _ensure_passenger_rows(ws, start_row, len(passenger_list), insert_pos)
         for i, pax in enumerate(passenger_list):
             row_num = passenger_start_row + i
             for col in range(1, 7): safe_set_cell_value(ws, row_num, col, None)
@@ -790,7 +831,6 @@ flight_plan_file = st.file_uploader("（可选）上传航段数据导出（北�
 
 if data_file and template_file:
     try:
-        # 双重判断逻辑：优先看文件名，其次看表头
         is_east_china = False
         file_name = template_file.name.lower()
         
@@ -839,7 +879,7 @@ if data_file and template_file:
             lic_val = find_license(crew["name"])
             contact = find_contact(crew["name"])
             
-            # ★ 新的国籍识别逻辑：优先使用 GD 单上的三字码，如果识别不了直接报错提示
+            # ★ 国籍识别逻辑：优先使用 GD 单上的三字码，如果识别不了直接报错提示
             raw_nat = str(crew.get("nationality", "")).strip().upper()
             if raw_nat and raw_nat in NATION_MAP:
                 nation = NATION_MAP[raw_nat]
