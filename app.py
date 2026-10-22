@@ -174,7 +174,7 @@ def get_aircraft_type(reg, gd_type=""):
     return gd_type_str
 
 def get_nation_name(code):
-    code = code.strip().upper()
+    code = str(code).strip().upper()
     return NATION_MAP.get(code, code)
 
 def extract_chinese_name(full_name):
@@ -648,7 +648,7 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
                 safe_set_cell_value(ws, row_num, 2, name_text)
                 safe_set_cell_value(ws, row_num, 3, crew_row.get("性别", ""))
                 safe_set_cell_value(ws, row_num, 4, crew_row.get("出生日期", ""))
-                safe_set_cell_value(ws, row_num, 5, crew_row.get("国籍", "中国"))
+                safe_set_cell_value(ws, row_num, 5, crew_row.get("国籍", ""))
                 safe_set_cell_font(ws, row_num, 5, Font(name='宋体', size=16))
                 safe_set_cell_value(ws, row_num, 6, crew_row.get("证件号码", ""))
                 safe_set_cell_font(ws, row_num, 6, Font(name='宋体', size=16))
@@ -850,7 +850,6 @@ if data_file and template_file:
         elif "总调" in file_name:
             is_east_china = False
         else:
-            # 如果文件名没有明确特征，退回表头判断
             try:
                 wb_temp = load_workbook(template_file)
                 ws_temp = wb_temp.active
@@ -888,7 +887,13 @@ if data_file and template_file:
             id_val = find_id(crew["name"]) or crew.get("passport_no", "")
             lic_val = find_license(crew["name"])
             contact = find_contact(crew["name"])
-            nation = "中国" if is_18digit_id_card(id_val) or not id_val else "外籍"
+            
+            # ★ 新的国籍识别逻辑：优先使用 GD 单上的三字码
+            raw_nat = str(crew.get("nationality", "")).strip().upper()
+            if raw_nat:
+                nation = get_nation_name(raw_nat) # 例如 BRA -> 巴西
+            else:
+                nation = "中国" if is_18digit_id_card(id_val) or not id_val else "外籍"
 
             if idx == 0: preferred_role = "机长"
             elif idx == 1: preferred_role = "副驾驶"
