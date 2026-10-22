@@ -783,10 +783,15 @@ def fill_template(template_bytes, data, crew_rows, passenger_list, route_display
         
     ws = wb.active
     
-    # 智能识别是否为华东区内模板：看第15行第7列(G列)是否为"执照号码"
+    # ★ 终极识别逻辑：向上扫描前 30 行，只要找到包含“国籍”的表头，就认为是华东模板
     is_east_china = False
-    if ws.cell(15, 7).value and "执照号码" in str(ws.cell(15, 7).value):
-        is_east_china = True
+    for r in range(1, 31):
+        for c in range(1, 10):
+            cell_val = ws.cell(r, c).value
+            if cell_val and "国籍" in str(cell_val):
+                is_east_china = True
+                break
+        if is_east_china: break
         
     if is_east_china:
         return fill_template_east_china(template_bytes, data, crew_rows, passenger_list, route_display)
@@ -807,8 +812,13 @@ if data_file and template_file:
         try:
             wb_temp = load_workbook(template_file)
             ws_temp = wb_temp.active
-            if ws_temp.cell(15, 7).value and "执照号码" in str(ws_temp.cell(15, 7).value):
-                is_east_china = True
+            for r in range(1, 31):
+                for c in range(1, 10):
+                    cell_val = ws_temp.cell(r, c).value
+                    if cell_val and "国籍" in str(cell_val):
+                        is_east_china = True
+                        break
+                if is_east_china: break
         except:
             pass
 
