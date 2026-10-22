@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-专用：备案表生成（支持总调模板 & 华东区内模板自动识别）
+专用：备案表生成（支持总调模板 & 华东区内模板，行号写死版）
 """
 
 import streamlit as st
@@ -144,7 +144,6 @@ CREW_COLUMNS = ["姓名", "联系方式", "执照号码", "证件号码"]
 CREW_FILL_COLUMNS_GENERAL = ["职务", "姓名", "性别", "出生日期", "证件号码", "执照号码", "联系方式"]
 CREW_FILL_COLUMNS_EAST = ["职务", "姓名", "性别", "出生日期", "国籍", "证件号码", "执照号码"]
 
-# ★ 更新了所有涉及的国籍三字码
 NATION_MAP = {
     "CHN": "中国", "HKG": "中国香港", "TWN": "中国台湾省", "MAC": "中国澳门",
     "DEU": "德国", "USA": "美国", "GBR": "英国", "FRA": "法国", "RUS": "俄罗斯",
@@ -640,59 +639,37 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
     safe_set_cell_value(ws, 10, 4, data.get("flt", ""))
     safe_set_cell_value(ws, 10, 5, route_display if route_display else "")
     
-    # 3. 机组信息（动态寻找行号）
-    def _fill_crew_row_by_data_west(ws, label_keyword, crew_row):
-        for row in ws.iter_rows(min_row=10, max_row=30):
-            cell = row[0]
-            if cell.value and isinstance(cell.value, str) and cell.value.strip() == label_keyword:
-                row_num = cell.row
-                name_text = crew_row.get("姓名", "")
-                safe_set_cell_value(ws, row_num, 2, name_text)
-                safe_set_cell_value(ws, row_num, 3, crew_row.get("性别", ""))
-                safe_set_cell_value(ws, row_num, 4, crew_row.get("出生日期", ""))
-                safe_set_cell_value(ws, row_num, 5, crew_row.get("国籍", ""))
-                safe_set_cell_font(ws, row_num, 5, Font(name='宋体', size=16))
-                safe_set_cell_value(ws, row_num, 6, crew_row.get("证件号码", ""))
-                safe_set_cell_font(ws, row_num, 6, Font(name='宋体', size=16))
-                safe_set_cell_value(ws, row_num, 7, crew_row.get("执照号码", ""))
-                safe_set_cell_font(ws, row_num, 7, Font(name='宋体', size=12))
-                return True
-        return False
-
-    def _fill_empty_crew_row_west(ws, label_keyword):
-        for row in ws.iter_rows(min_row=10, max_row=30):
-            cell = row[0]
-            if cell.value and isinstance(cell.value, str) and cell.value.strip() == label_keyword:
-                row_num = cell.row
-                for c in range(2, 8): safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
-                return True
-        return False
-
+    # 3. 机组信息（★ 华东模板固定从 15 行开始）
     role_map = {}
     for cr in crew_rows:
         role = str(cr.get("职务", "")).strip()
         if role and role not in role_map: role_map[role] = cr
 
-    for role in ["机长", "副驾驶", "乘务", "机务"]:
-        cr = role_map.get(role)
-        if cr and str(cr.get("姓名", "")).strip() not in ("", "无"): _fill_crew_row_by_data_west(ws, role, cr)
-        else: _fill_empty_crew_row_west(ws, role)
+    roles_pos = {"机长": 15, "副驾驶": 16, "乘务": 17, "机务": 18}
+    for role_name, row_num in roles_pos.items():
+        cr = role_map.get(role_name)
+        if cr and str(cr.get("姓名", "")).strip() not in ("", "无"):
+            name_val = str(cr.get("姓名", "")).strip()
+            safe_set_cell_value(ws, row_num, 2, name_val)
+            safe_set_cell_value(ws, row_num, 3, cr.get("性别", ""))
+            safe_set_cell_value(ws, row_num, 4, cr.get("出生日期", ""))
+            
+            safe_set_cell_value(ws, row_num, 5, cr.get("国籍", ""))
+            safe_set_cell_font(ws, row_num, 5, Font(name='宋体', size=16))
+            
+            safe_set_cell_value(ws, row_num, 6, cr.get("证件号码", ""))
+            safe_set_cell_font(ws, row_num, 6, Font(name='宋体', size=16))
+            
+            safe_set_cell_value(ws, row_num, 7, cr.get("执照号码", ""))
+            safe_set_cell_font(ws, row_num, 7, Font(name='宋体', size=12))
+        else:
+            for c in range(2, 8):
+                safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
     
-    # 4. 乘客信息（动态找乘客表头）
-    passenger_start_row = None
-    for row in ws.iter_rows(min_row=1, max_row=100):
-        row_text = "".join([str(c.value).strip() for c in row if c.value])
-        if "姓名" in row_text and "性别" in row_text and "出生日期" in row_text:
-            passenger_start_row = row[0].row + 1
-            break
-        if "乘客信息" in row_text:
-            passenger_start_row = row[0].row + 2
-            break
-
-    if passenger_start_row and passenger_list:
-        passenger_start_row = _ensure_passenger_rows(ws, passenger_start_row, len(passenger_list))
-
-    if passenger_start_row:
+    # 4. 乘客信息（★ 华东模板固定从 23 行开始）
+    if passenger_list:
+        start_row = 23
+        passenger_start_row = _ensure_passenger_rows(ws, start_row, len(passenger_list))
         for i, pax in enumerate(passenger_list):
             row_num = passenger_start_row + i
             pax_name = extract_chinese_name(pax["name"])
@@ -755,57 +732,31 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
                 break
         safe_set_cell_value(ws, data_row, route_col, route_display if route_display else "")
 
-    # 机组 (动态找行)
-    def _fill_crew_row_by_data(ws, label_keyword, crew_row):
-        for row in ws.iter_rows(min_row=10, max_row=30):
-            cell = row[0]
-            if cell.value and isinstance(cell.value, str) and cell.value.strip() == label_keyword:
-                row_num = cell.row
-                name_text = crew_row.get("姓名", "")
-                safe_set_cell_value(ws, row_num, 2, name_text)
-                safe_set_cell_value(ws, row_num, 3, crew_row.get("性别", ""))
-                safe_set_cell_value(ws, row_num, 4, crew_row.get("出生日期", ""))
-                safe_set_cell_value(ws, row_num, 5, crew_row.get("证件号码", ""))
-                safe_set_cell_value(ws, row_num, 6, crew_row.get("执照号码", ""))
-                safe_set_cell_value(ws, row_num, 7, crew_row.get("联系方式", ""))
-                _style_name_cell(ws, row_num, 2, name_text)
-                return True
-        return False
-
-    def _fill_empty_crew_row(ws, label_keyword):
-        for row in ws.iter_rows(min_row=10, max_row=30):
-            cell = row[0]
-            if cell.value and isinstance(cell.value, str) and cell.value.strip() == label_keyword:
-                row_num = cell.row
-                for c in range(2, 8): safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
-                return True
-        return False
-
+    # 机组（★ 总调模板固定从 13 行开始）
     role_map = {}
     for cr in crew_rows:
         role = str(cr.get("职务", "")).strip()
         if role and role not in role_map: role_map[role] = cr
 
-    for role in ["机长", "副驾驶", "乘务", "机务"]:
-        cr = role_map.get(role)
-        if cr and str(cr.get("姓名", "")).strip() not in ("", "无"): _fill_crew_row_by_data(ws, role, cr)
-        else: _fill_empty_crew_row(ws, role)
+    roles_pos = {"机长": 13, "副驾驶": 14, "乘务": 15, "机务": 16}
+    for role_name, row_num in roles_pos.items():
+        cr = role_map.get(role_name)
+        if cr and str(cr.get("姓名", "")).strip() not in ("", "无"):
+            name_text = cr.get("姓名", "")
+            safe_set_cell_value(ws, row_num, 2, name_text)
+            safe_set_cell_value(ws, row_num, 3, cr.get("性别", ""))
+            safe_set_cell_value(ws, row_num, 4, cr.get("出生日期", ""))
+            safe_set_cell_value(ws, row_num, 5, cr.get("证件号码", ""))
+            safe_set_cell_value(ws, row_num, 6, cr.get("执照号码", ""))
+            safe_set_cell_value(ws, row_num, 7, cr.get("联系方式", ""))
+            _style_name_cell(ws, row_num, 2, name_text)
+        else:
+            for c in range(2, 8): safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
 
-    # 乘客 (修复后的动态查找逻辑)
-    passenger_start_row = None
-    for row in ws.iter_rows(min_row=1, max_row=100):
-        row_text = "".join([str(c.value).strip() for c in row if c.value])
-        if "姓名" in row_text and "性别" in row_text and "出生日期" in row_text:
-            passenger_start_row = row[0].row + 1
-            break
-        if "乘客信息" in row_text:
-            passenger_start_row = row[0].row + 2
-            break
-
-    if passenger_start_row and passenger_list:
-        passenger_start_row = _ensure_passenger_rows(ws, passenger_start_row, len(passenger_list))
-
-    if passenger_start_row:
+    # 乘客（★ 总调模板固定从 18 行开始）
+    if passenger_list:
+        start_row = 18
+        passenger_start_row = _ensure_passenger_rows(ws, start_row, len(passenger_list))
         for i, pax in enumerate(passenger_list):
             row_num = passenger_start_row + i
             for col in range(1, 7): safe_set_cell_value(ws, row_num, col, None)
