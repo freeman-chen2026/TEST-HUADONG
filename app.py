@@ -566,105 +566,156 @@ def _find_first_content_row(ws, start_row, max_scan=300):
             if v is not None and str(v).strip(): return r
     return None
 
-# ★ 改进后的核心行插入逻辑：固定在特定行号插入，并锁定图片大小
-def _ensure_passenger_rows(ws, data_start_row, needed_count, insert_pos):
-    if needed_count <= 0: return data_start_row
+
+# ================================================================
+# ★ 修复后的核心行插入逻辑（对齐第二段代码方案）
+# ================================================================
+def _shift_images_down(ws, end_row, extra):
+    """按插入行数平移图片行号，保留原锚点类型（不改变缩放/宽高语义）。"""
+    if extra <= 0:
+        return
+    end_row_0 = end_row - 1  # openpyxl 内部 row 索引从 0 开始
+    for img in getattr(ws, '_images', []) or []:
+        anchor = getattr(img, 'anchor', None)
+        if anchor is None:
+            continue
+        frm = getattr(anchor, '_from', None)
+        to = getattr(anchor, 'to', None)
+        need_shift = False
+        if frm is not None:
+            r = getattr(frm, 'row', None)
+            if r is not None and r >= end_row_0:
+                need_shift = True
+        if not need_shift and to is not None:
+            r = getattr(to, 'row', None)
+            if r is not None and r >= end_row_0:
+                need_shift = True
+        if not need_shift:
+            continue
+        if frm is not None:
+            try:
+                frm.row = frm.row + extra
+            except Exception:
+                pass
+        if to is not None:
+            try:
+                to.row = to.row + extra
+            except Exception:
+                pass
+
+
+def _ensure_passenger_rows(ws, data_start_row, needed_count):
+    """
+    在乘客区末尾（end_row = 乘客区下边界）插入足够的空行。
+    - 样式从 end_row - 1（最后一行真实乘客行）复制，保证与模板一致；
+    - 保留 end_row 之后所有行的行高、合并；
+    - 图片按行号平移（保留原锚点类型），不改变图片显示大小。
+    """
+    if needed_count <= 0:
+        return data_start_row
+
     from openpyxl.utils import get_column_letter
 
-    # 找到实际需要填充多少行
     end_row = _find_first_content_row(ws, data_start_row)
-    if end_row is None: return data_start_row
+    if end_row is None:
+        return data_start_row
+
     existing_rows = end_row - data_start_row
-    if needed_count <= existing_rows: return data_start_row
-    
+    if needed_count <= existing_rows:
+        return data_start_row
+
     extra = needed_count - existing_rows
+    template_row = end_row - 1  # 最后一行真实乘客行
 
-    # ★ 保护图片：记录下所有图片的原始宽高和相对位置，然后移出
-    saved_images = []
-    for img in list(getattr(ws, '_images', [])):
-        anchor = getattr(img, 'anchor', None)
-        if anchor is None: continue
-        frm = getattr(anchor, '_from', None)
-        if frm is None: continue
-        saved_images.append({
-            'img': img,
-            'row': frm.row,
-            'col': frm.col,
-            'width': getattr(img, 'width', None),
-            'height': getattr(img, 'height', None)
-        })
-    ws._images = []
+    max_col = ws.max_column or 10
 
-    # ★ 记录行高和受影响的行合并
-    max_row = ws.max_row
-    saved_heights = {}
-    for r in range(insert_pos, max_row + 1):
-        h = ws.row_dimensions[r].height
-        if h is not None: saved_heights[r] = h
+    # 向上找最近一个带合并的模板行，用于复制合并样式
+    merge_template_row = template_row
+    for r in range(template_row, data_start_row - 1, -1):
+        hit = False
+        for mr in ws.merged_cells.ranges:
+            if mr.min_row == r and mr.max_row == r:
+                hit = True
+                break
+        if hit:
+            merge_template_row = r
+            break
 
-    affected = []
-    for mr in list(ws.merged_cells.ranges):
-        if mr.min_row >= insert_pos or mr.min_row < insert_pos <= mr.max_row:
-            affected.append((mr.min_row, mr.min_col, mr.max_row, mr.max_col))
-            try: ws.unmerge_cells(str(mr))
-            except: pass
-
-    # 在指定的插入点（比如 20 行）强行插入
-    ws.insert_rows(insert_pos, extra)
-    
-    # 恢复受影响的行高（向下平移）
-    for r in list(ws.row_dimensions.keys()):
-        if r >= insert_pos:
-            try: del ws.row_dimensions[r]
-            except: pass
-    for old_r, h in saved_heights.items():
-        ws.row_dimensions[old_r + extra].height = h
-        
-    # 恢复受影响的合并
-    for min_r, min_c, max_r, max_c in affected:
-        if min_r >= insert_pos: new_min_r, new_max_r = min_r + extra, max_r + extra
-        else: new_min_r, new_max_r = min_r, max_r + extra
-        rng = (f"{get_column_letter(min_c)}{new_min_r}:" f"{get_column_letter(max_c)}{new_max_r}")
-        try: ws.merge_cells(rng)
-        except: pass
-
-    # 填充新行的格式（复制模板行样式）
-    template_row = insert_pos - 1
-    template_styles = {c: _style_snapshot(ws.cell(template_row, c)) for c in range(1, (ws.max_column or 10) + 1)}
+    template_styles = {
+        c: _style_snapshot(ws.cell(template_row, c))
+        for c in range(1, max_col + 1)
+    }
     template_height = ws.row_dimensions[template_row].height
-    
+
     template_merges = []
     for mr in list(ws.merged_cells.ranges):
-        if mr.min_row == template_row and mr.max_row == template_row:
+        if mr.min_row == merge_template_row and mr.max_row == merge_template_row:
             template_merges.append((mr.min_col, mr.max_col))
-            
-    for i in range(extra):
-        new_row = insert_pos + i
-        for c, snap in template_styles.items(): _style_apply(ws.cell(new_row, c), snap)
-        if template_height: ws.row_dimensions[new_row].height = template_height
-        for min_c, max_c in template_merges:
-            rng = (f"{get_column_letter(min_c)}{new_row}:" f"{get_column_letter(max_c)}{new_row}")
-            try: ws.merge_cells(rng)
-            except: pass
 
-    # ★ 恢复图片：如果在插入点之下，整体下移。并且锁定原本的宽高，防止拉伸！
-    from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
-    for s in saved_images:
-        img = s['img']
-        row = s['row']
-        col = s['col']
-        if row >= insert_pos - 1:
-            row += extra
-            
-        # 强制使用单单元格锚点，尺寸写死，就绝对拉不长了
-        marker = AnchorMarker(col=col, colOff=0, row=row, rowOff=0)
-        anchor = OneCellAnchor(_from=marker, ext=None)
-        anchor.width = s['width']
-        anchor.height = s['height']
-        img.anchor = anchor
-        ws.add_image(img)
+    # 保存 end_row 之后所有行高
+    max_row = ws.max_row
+    saved_heights = {}
+    for r in range(end_row, max_row + 1):
+        h = ws.row_dimensions[r].height
+        if h is not None:
+            saved_heights[r] = h
+
+    # 暂存并解除受影响合并
+    affected = []
+    for mr in list(ws.merged_cells.ranges):
+        if mr.min_row >= end_row or mr.min_row < end_row <= mr.max_row:
+            affected.append((mr.min_row, mr.min_col, mr.max_row, mr.max_col))
+            try:
+                ws.unmerge_cells(str(mr))
+            except Exception:
+                pass
+
+    # 在 end_row 处插入，即在乘客区末尾追加
+    ws.insert_rows(end_row, extra)
+
+    # ★ 只平移图片行号，保留原锚点类型与宽高
+    _shift_images_down(ws, end_row, extra)
+
+    # 恢复合并
+    for min_r, min_c, max_r, max_c in affected:
+        if min_r >= end_row:
+            new_min_r, new_max_r = min_r + extra, max_r + extra
+        else:
+            new_min_r, new_max_r = min_r, max_r + extra
+        rng = (f"{get_column_letter(min_c)}{new_min_r}:"
+               f"{get_column_letter(max_c)}{new_max_r}")
+        try:
+            ws.merge_cells(rng)
+        except Exception:
+            pass
+
+    # 恢复行高（整体下移 extra 行）
+    for r in list(ws.row_dimensions.keys()):
+        if r >= end_row:
+            try:
+                del ws.row_dimensions[r]
+            except Exception:
+                pass
+    for old_r, h in saved_heights.items():
+        ws.row_dimensions[old_r + extra].height = h
+
+    # 填充新插入行的样式与合并
+    for i in range(extra):
+        new_row = end_row + i
+        for c, snap in template_styles.items():
+            _style_apply(ws.cell(new_row, c), snap)
+        if template_height:
+            ws.row_dimensions[new_row].height = template_height
+        for min_c, max_c in template_merges:
+            rng = (f"{get_column_letter(min_c)}{new_row}:"
+                   f"{get_column_letter(max_c)}{new_row}")
+            try:
+                ws.merge_cells(rng)
+            except Exception:
+                pass
 
     return data_start_row
+
 
 # ================================================================
 # 核心填充逻辑
@@ -676,16 +727,16 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
         raise RuntimeError("❌ 模板文件解析失败。请确保你上传的是真正的 `.xlsx` 格式（请用 Excel 打开文件，选择“另存为”，格式选 Excel 工作簿(*.xlsx)），而不是直接修改后缀名。")
 
     ws = wb.active
-    
+
     # 1. 飞行性质（第6行，B列）
     safe_set_cell_value(ws, 6, 2, "调机" if not passenger_list else "商务")
-    
+
     # 2. 飞行信息（第10行，B=机型 C=注册号 D=航班号 E=行程）
     safe_set_cell_value(ws, 10, 2, data.get("ac_type", ""))
     safe_set_cell_value(ws, 10, 3, data.get("reg", ""))
     safe_set_cell_value(ws, 10, 4, data.get("flt", ""))
     safe_set_cell_value(ws, 10, 5, route_display if route_display else "")
-    
+
     # 3. 机组信息（华东模板固定从 15 行开始）
     role_map = {}
     for cr in crew_rows:
@@ -709,18 +760,19 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
         else:
             for c in range(2, 8):
                 safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
-    
-    # 4. 乘客信息（华东模板从 23 行开始，在第 24 行插入）
+
+    # 4. 乘客信息（华东模板从 23 行开始，自动在末尾追加）
     if passenger_list:
         start_row = 23
-        insert_pos = 24
-        passenger_start_row = _ensure_passenger_rows(ws, start_row, len(passenger_list), insert_pos)
+        passenger_start_row = _ensure_passenger_rows(ws, start_row, len(passenger_list))
         for i, pax in enumerate(passenger_list):
             row_num = passenger_start_row + i
             pax_name = extract_chinese_name(pax["name"])
-            try: ws.merge_cells(start_row=row_num, start_column=6, end_row=row_num, end_column=7)
-            except: pass
-                
+            try:
+                ws.merge_cells(start_row=row_num, start_column=6, end_row=row_num, end_column=7)
+            except Exception:
+                pass
+
             safe_set_cell_value(ws, row_num, 1, pax_name)
             safe_set_cell_value(ws, row_num, 2, pax.get("gender", ""))
             safe_set_cell_value(ws, row_num, 3, pax.get("dob", ""))
@@ -736,6 +788,7 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
     wb.save(output); output.seek(0)
     return output
 
+
 def fill_template_general(template_bytes, data, crew_rows, passenger_list, route_display):
     try:
         wb = load_workbook(template_bytes)
@@ -743,7 +796,7 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
         raise RuntimeError("❌ 模板文件解析失败。请确保你上传的是真正的 `.xlsx` 格式（请用 Excel 打开文件，选择“另存为”，格式选 Excel 工作簿(*.xlsx)），而不是直接修改后缀名。")
 
     ws = wb.active
-    
+
     # 飞行目的
     if not passenger_list:
         for row in ws.iter_rows(min_row=1, max_row=10):
@@ -751,7 +804,7 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
                 if cell.value and isinstance(cell.value, str) and "飞行目的" in cell.value:
                     safe_set_cell_value(ws, cell.row + 1, 2, "调机")
                     break
-    
+
     # 飞行信息
     info_row = None
     for row in ws.iter_rows(min_row=1, max_row=20):
@@ -759,7 +812,7 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
             if cell.value and isinstance(cell.value, str) and cell.value.strip() in ["机型", "注册号", "航班号", "航班行程"]:
                 info_row = cell.row; break
         if info_row: break
-    
+
     if info_row:
         data_row = info_row + 1
         safe_set_cell_value(ws, data_row, 2, data.get("ac_type", ""))
@@ -793,11 +846,10 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
         else:
             for c in range(2, 8): safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
 
-    # 乘客（总调模板从 19 行开始，在第 20 行插入）
+    # 乘客（总调模板从 19 行开始，自动在末尾追加）
     if passenger_list:
         start_row = 19
-        insert_pos = 20
-        passenger_start_row = _ensure_passenger_rows(ws, start_row, len(passenger_list), insert_pos)
+        passenger_start_row = _ensure_passenger_rows(ws, start_row, len(passenger_list))
         for i, pax in enumerate(passenger_list):
             row_num = passenger_start_row + i
             for col in range(1, 7): safe_set_cell_value(ws, row_num, col, None)
@@ -816,11 +868,13 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
     wb.save(output); output.seek(0)
     return output
 
+
 def fill_template(template_bytes, data, crew_rows, passenger_list, route_display, is_east_china):
     if is_east_china:
         return fill_template_east_china(template_bytes, data, crew_rows, passenger_list, route_display)
     else:
         return fill_template_general(template_bytes, data, crew_rows, passenger_list, route_display)
+
 
 # ================================================================
 # 页面逻辑
@@ -833,7 +887,7 @@ if data_file and template_file:
     try:
         is_east_china = False
         file_name = template_file.name.lower()
-        
+
         if "华东" in file_name:
             is_east_china = True
         elif "总调" in file_name:
@@ -870,7 +924,7 @@ if data_file and template_file:
         role_order = ["机长", "副驾驶", "乘务", "机务"]
         role_rows = {r: None for r in role_order}
         overflow_rows = []
-        
+
         has_unknown_nation = False
 
         for idx, crew in enumerate(crew_list):
@@ -878,8 +932,7 @@ if data_file and template_file:
             id_val = find_id(crew["name"]) or crew.get("passport_no", "")
             lic_val = find_license(crew["name"])
             contact = find_contact(crew["name"])
-            
-            # ★ 国籍识别逻辑：优先使用 GD 单上的三字码，如果识别不了直接报错提示
+
             raw_nat = str(crew.get("nationality", "")).strip().upper()
             if raw_nat and raw_nat in NATION_MAP:
                 nation = NATION_MAP[raw_nat]
@@ -925,7 +978,6 @@ if data_file and template_file:
             overflow_desc = "、".join(f"{r['姓名']}（当前标为「{r['职务']}」）" for r in overflow_rows)
             st.warning(f"⚠️ **本次机组共 {len(crew_list)} 人**，而模板机组区通常只有 4 行。以下人员**不会自动写入模板**：\n\n**{overflow_desc}**")
 
-        # 弹出红色警告提醒用户去修改
         if has_unknown_nation and is_east_china:
             st.error("⚠️ **警告：部分机组人员的国籍未能自动识别，请在下方表格中手动修改！**")
 
@@ -933,7 +985,7 @@ if data_file and template_file:
         editor_key = f"crew_fill_editor_{abs(hash(crew_signature)) % (10**8)}"
 
         df_fill = pd.DataFrame(initial_rows, columns=show_cols)
-        
+
         col_config = {
             "职务": st.column_config.SelectboxColumn("职务", options=["机长", "副驾驶", "乘务", "机务"], width="small"),
             "姓名": st.column_config.TextColumn("姓名", width="medium"),
@@ -948,10 +1000,10 @@ if data_file and template_file:
             col_config["联系方式"] = st.column_config.TextColumn("联系方式", width="medium")
 
         edited_crew_df = st.data_editor(
-            df_fill, 
-            num_rows="dynamic", 
-            width="stretch", 
-            height=280, 
+            df_fill,
+            num_rows="dynamic",
+            width="stretch",
+            height=280,
             key=editor_key,
             column_config=col_config
         )
