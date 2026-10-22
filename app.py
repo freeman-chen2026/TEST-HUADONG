@@ -638,38 +638,58 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
     safe_set_cell_value(ws, 10, 4, data.get("flt", ""))
     safe_set_cell_value(ws, 10, 5, route_display if route_display else "")
     
-    # 3. 机组信息（15-18行）E=国籍，F=证件号码(16号)，G=执照号码(12号)
+    # 3. 机组信息（动态寻找行号）
+    def _fill_crew_row_by_data_west(ws, label_keyword, crew_row):
+        for row in ws.iter_rows(min_row=10, max_row=30):
+            cell = row[0]
+            if cell.value and isinstance(cell.value, str) and cell.value.strip() == label_keyword:
+                row_num = cell.row
+                name_text = crew_row.get("姓名", "")
+                safe_set_cell_value(ws, row_num, 2, name_text)
+                safe_set_cell_value(ws, row_num, 3, crew_row.get("性别", ""))
+                safe_set_cell_value(ws, row_num, 4, crew_row.get("出生日期", ""))
+                safe_set_cell_value(ws, row_num, 5, crew_row.get("国籍", "中国"))
+                safe_set_cell_font(ws, row_num, 5, Font(name='宋体', size=16))
+                safe_set_cell_value(ws, row_num, 6, crew_row.get("证件号码", ""))
+                safe_set_cell_font(ws, row_num, 6, Font(name='宋体', size=16))
+                safe_set_cell_value(ws, row_num, 7, crew_row.get("执照号码", ""))
+                safe_set_cell_font(ws, row_num, 7, Font(name='宋体', size=12))
+                return True
+        return False
+
+    def _fill_empty_crew_row_west(ws, label_keyword):
+        for row in ws.iter_rows(min_row=10, max_row=30):
+            cell = row[0]
+            if cell.value and isinstance(cell.value, str) and cell.value.strip() == label_keyword:
+                row_num = cell.row
+                for c in range(2, 8): safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
+                return True
+        return False
+
     role_map = {}
     for cr in crew_rows:
         role = str(cr.get("职务", "")).strip()
         if role and role not in role_map: role_map[role] = cr
 
-    roles_pos = {"机长": 15, "副驾驶": 16, "乘务": 17, "机务": 18}
-    for role_name, row_num in roles_pos.items():
-        cr = role_map.get(role_name)
-        if cr and str(cr.get("姓名", "")).strip() not in ("", "无"):
-            name_val = str(cr.get("姓名", "")).strip()
-            
-            safe_set_cell_value(ws, row_num, 2, name_val)
-            safe_set_cell_value(ws, row_num, 3, cr.get("性别", ""))
-            safe_set_cell_value(ws, row_num, 4, cr.get("出生日期", ""))
-            
-            safe_set_cell_value(ws, row_num, 5, cr.get("国籍", "中国"))
-            safe_set_cell_font(ws, row_num, 5, Font(name='宋体', size=16))
-            
-            safe_set_cell_value(ws, row_num, 6, cr.get("证件号码", ""))
-            safe_set_cell_font(ws, row_num, 6, Font(name='宋体', size=16))
-            
-            safe_set_cell_value(ws, row_num, 7, cr.get("执照号码", ""))
-            safe_set_cell_font(ws, row_num, 7, Font(name='宋体', size=12))
-        else:
-            for c in range(2, 8):
-                safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
+    for role in ["机长", "副驾驶", "乘务", "机务"]:
+        cr = role_map.get(role)
+        if cr and str(cr.get("姓名", "")).strip() not in ("", "无"): _fill_crew_row_by_data_west(ws, role, cr)
+        else: _fill_empty_crew_row_west(ws, role)
     
-    # 4. 乘客信息（从23行开始）
-    if passenger_list:
-        start_row = 23
-        passenger_start_row = _ensure_passenger_rows(ws, start_row, len(passenger_list))
+    # 4. 乘客信息（动态找乘客表头）
+    passenger_start_row = None
+    for row in ws.iter_rows(min_row=1, max_row=100):
+        for cell in row:
+            if cell.value and isinstance(cell.value, str):
+                val = cell.value.strip()
+                if "姓名" in val and "性别" in val and "出生日期" in val:
+                    passenger_start_row = cell.row + 1; break
+        if passenger_start_row: break
+
+    if passenger_start_row and passenger_list:
+        passenger_start_row = _ensure_passenger_rows(ws, passenger_start_row, len(passenger_list))
+
+    if passenger_start_row:
         for i, pax in enumerate(passenger_list):
             row_num = passenger_start_row + i
             pax_name = extract_chinese_name(pax["name"])
@@ -806,24 +826,7 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
     wb.save(output); output.seek(0)
     return output
 
-def fill_template(template_bytes, data, crew_rows, passenger_list, route_display):
-    try:
-        wb = load_workbook(template_bytes)
-    except Exception:
-        raise RuntimeError("❌ 模板文件解析失败。请确保你上传的是真正的 `.xlsx` 格式（请用 Excel 打开文件，选择“另存为”，格式选 Excel 工作簿(*.xlsx)），而不是直接修改后缀名。")
-        
-    ws = wb.active
-    
-    is_east_china = False
-    for r in range(1, 30):
-        if ws.cell(r, 1).value == "职务" and ws.cell(r, 2).value == "姓名":
-            e_val = str(ws.cell(r, 5).value or "")
-            if "国籍" in e_val:
-                is_east_china = True
-            else:
-                is_east_china = False
-            break
-        
+def fill_template(template_bytes, data, crew_rows, passenger_list, route_display, is_east_china):
     if is_east_china:
         return fill_template_east_china(template_bytes, data, crew_rows, passenger_list, route_display)
     else:
@@ -838,20 +841,29 @@ flight_plan_file = st.file_uploader("（可选）上传航段数据导出（北�
 
 if data_file and template_file:
     try:
+        # 双重判断逻辑：优先看文件名，其次看表头
         is_east_china = False
-        try:
-            wb_temp = load_workbook(template_file)
-            ws_temp = wb_temp.active
-            for r in range(1, 30):
-                if ws_temp.cell(r, 1).value == "职务" and ws_temp.cell(r, 2).value == "姓名":
-                    e_val = str(ws_temp.cell(r, 5).value or "")
-                    if "国籍" in e_val:
-                        is_east_china = True
-                    else:
-                        is_east_china = False
-                    break
-        except:
-            pass
+        file_name = template_file.name.lower()
+        
+        if "华东" in file_name:
+            is_east_china = True
+        elif "总调" in file_name:
+            is_east_china = False
+        else:
+            # 如果文件名没有明确特征，退回表头判断
+            try:
+                wb_temp = load_workbook(template_file)
+                ws_temp = wb_temp.active
+                for r in range(1, 30):
+                    if ws_temp.cell(r, 1).value == "职务" and ws_temp.cell(r, 2).value == "姓名":
+                        e_val = str(ws_temp.cell(r, 5).value or "")
+                        if "国籍" in e_val:
+                            is_east_china = True
+                        else:
+                            is_east_china = False
+                        break
+            except:
+                pass
 
         if is_east_china:
             show_cols = CREW_FILL_COLUMNS_EAST
@@ -988,7 +1000,7 @@ if data_file and template_file:
         download_file_name = f"{safe_file_name}.xlsx"
 
         try:
-            result_bytes = fill_template(template_file, data, crew_for_template, passenger_list, route_display).getvalue()
+            result_bytes = fill_template(template_file, data, crew_for_template, passenger_list, route_display, is_east_china).getvalue()
         except Exception as e:
             st.error(f"❌ 生成失败：{e}")
             st.stop()
