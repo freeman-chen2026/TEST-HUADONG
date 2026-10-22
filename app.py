@@ -9,6 +9,7 @@ import io
 from io import BytesIO
 from openpyxl import load_workbook
 from openpyxl.styles import Font
+from openpyxl.cell.cell import MergedCell
 import re
 import json
 from datetime import datetime, timedelta
@@ -246,13 +247,24 @@ def parse_document_type(passport_no, doc_type):
     if re.match(r'^[0-9]{15}$', pn) or re.match(r'^[0-9]{17}[0-9Xx]$', pn): return "身份证"
     return "护照"
 
+# ★ 彻底修复 MergedCell 报错的终极安全函数
 def safe_set_cell_value(ws, row, col, value):
-    for merged_range in ws.merged_cells.ranges:
-        if merged_range.min_row <= row <= merged_range.max_row and \
-           merged_range.min_col <= col <= merged_range.max_col:
-            ws.cell(row=merged_range.min_row, column=merged_range.min_col).value = value
-            return
-    ws.cell(row=row, column=col).value = value
+    cell = ws.cell(row=row, column=col)
+    if isinstance(cell, MergedCell):
+        for merged_range in ws.merged_cells.ranges:
+            if merged_range.min_row <= row <= merged_range.max_row and \
+               merged_range.min_col <= col <= merged_range.max_col:
+                target = ws.cell(row=merged_range.min_row, column=merged_range.min_col)
+                if not isinstance(target, MergedCell):
+                    target.value = value
+                return
+    else:
+        cell.value = value
+
+def safe_set_cell_font(ws, row, col, font):
+    cell = ws.cell(row=row, column=col)
+    if not isinstance(cell, MergedCell):
+        cell.font = font
 
 def get_value_right(ws, row, start_col):
     for col in range(start_col, start_col + 10):
@@ -513,6 +525,7 @@ def _style_name_cell(ws, row, col, text):
             target_col = merged_range.min_col
             break
     cell = ws.cell(row=target_row, column=target_col)
+    if isinstance(cell, MergedCell): return
     text_str = str(text) if text is not None else ""
     new_align = _copy_style(cell.alignment)
     new_align.wrap_text = True
@@ -535,6 +548,7 @@ def _style_snapshot(cell):
     return {'font': _copy_style(cell.font),'border': _copy_style(cell.border),'fill': _copy_style(cell.fill),'number_format': cell.number_format,'protection': _copy_style(cell.protection),'alignment': _copy_style(cell.alignment)}
 
 def _style_apply(cell, snap):
+    if isinstance(cell, MergedCell): return
     cell.font = _copy_style(snap['font'])
     cell.border = _copy_style(snap['border'])
     cell.fill = _copy_style(snap['fill'])
@@ -575,7 +589,6 @@ def _ensure_passenger_rows(ws, data_start_row, needed_count):
             except: pass
     ws.insert_rows(end_row, extra)
     
-    # 插入后，重新应用受影响的合并单元格
     for min_r, min_c, max_r, max_c in affected:
         if min_r >= end_row: new_min_r, new_max_r = min_r + extra, max_r + extra
         else: new_min_r, new_max_r = min_r, max_r + extra
@@ -589,7 +602,6 @@ def _ensure_passenger_rows(ws, data_start_row, needed_count):
             except: pass
     for old_r, h in saved_heights.items(): ws.row_dimensions[old_r + extra].height = h
     
-    # 复制样式和模板行的合并单元格到新行
     template_merges = []
     for mr in list(ws.merged_cells.ranges):
         if mr.min_row == template_row and mr.max_row == template_row:
@@ -642,20 +654,14 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
             safe_set_cell_value(ws, row_num, 3, cr.get("性别", ""))
             safe_set_cell_value(ws, row_num, 4, cr.get("出生日期", ""))
             
-            # E列：国籍
-            cell_e = ws.cell(row=row_num, column=5)
-            cell_e.value = cr.get("国籍", "中国")
-            cell_e.font = Font(name='宋体', size=16)
+            safe_set_cell_value(ws, row_num, 5, cr.get("国籍", "中国"))
+            safe_set_cell_font(ws, row_num, 5, Font(name='宋体', size=16))
             
-            # F列：证件号码
-            cell_f = ws.cell(row=row_num, column=6)
-            cell_f.value = cr.get("证件号码", "")
-            cell_f.font = Font(name='宋体', size=16)
+            safe_set_cell_value(ws, row_num, 6, cr.get("证件号码", ""))
+            safe_set_cell_font(ws, row_num, 6, Font(name='宋体', size=16))
             
-            # G列：执照号码
-            cell_g = ws.cell(row=row_num, column=7)
-            cell_g.value = cr.get("执照号码", "")
-            cell_g.font = Font(name='宋体', size=12)
+            safe_set_cell_value(ws, row_num, 7, cr.get("执照号码", ""))
+            safe_set_cell_font(ws, row_num, 7, Font(name='宋体', size=12))
         else:
             for c in range(2, 8):
                 safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
@@ -668,7 +674,6 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
             row_num = passenger_start_row + i
             pax_name = extract_chinese_name(pax["name"])
             
-            # ★ 强制把每个乘客行的 F 和 G 列合并，以容纳更长的身份证号
             try:
                 ws.merge_cells(start_row=row_num, start_column=6, end_row=row_num, end_column=7)
             except Exception:
@@ -684,7 +689,7 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
             safe_set_cell_value(ws, row_num, 6, pax.get("passport_no", ""))
             
             for col_idx in range(1, 7):
-                ws.cell(row=row_num, column=col_idx).font = Font(name='宋体', size=16)
+                safe_set_cell_font(ws, row_num, col_idx, Font(name='宋体', size=16))
 
     output = BytesIO()
     wb.save(output); output.seek(0)
@@ -797,7 +802,6 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
     return output
 
 def fill_template(template_bytes, data, crew_rows, passenger_list, route_display):
-    # 尝试直接打开模板判断
     try:
         wb = load_workbook(template_bytes)
     except Exception:
@@ -805,7 +809,6 @@ def fill_template(template_bytes, data, crew_rows, passenger_list, route_display
         
     ws = wb.active
     
-    # ★ 终极识别逻辑：向上扫描前 30 行，只要找到包含“国籍”的表头，就认为是华东模板
     is_east_china = False
     for r in range(1, 31):
         for c in range(1, 10):
@@ -829,7 +832,6 @@ flight_plan_file = st.file_uploader("（可选）上传航段数据导出（北�
 
 if data_file and template_file:
     try:
-        # 1. 识别模板类型
         is_east_china = False
         try:
             wb_temp = load_workbook(template_file)
@@ -844,7 +846,6 @@ if data_file and template_file:
         except:
             pass
 
-        # 2. 根据模板类型设置前端展示的列
         if is_east_china:
             show_cols = CREW_FILL_COLUMNS_EAST
         else:
@@ -865,7 +866,6 @@ if data_file and template_file:
 
         for idx, crew in enumerate(crew_list):
             name_cn = extract_chinese_name(crew["name"])
-            # 去掉之前错误的强行覆盖逻辑，严格按字段读取
             id_val = find_id(crew["name"]) or crew.get("passport_no", "")
             lic_val = find_license(crew["name"])
             contact = find_contact(crew["name"])
@@ -906,7 +906,6 @@ if data_file and template_file:
         crew_signature = "|".join([c.get("name", "") for c in crew_list])
         editor_key = f"crew_fill_editor_{abs(hash(crew_signature)) % (10**8)}"
 
-        # 3. 渲染可编辑表格（根据模板展示不同的列）
         df_fill = pd.DataFrame(initial_rows, columns=show_cols)
         
         col_config = {
