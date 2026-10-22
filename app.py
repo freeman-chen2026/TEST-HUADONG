@@ -55,9 +55,9 @@ BUILTIN_CREW_DATA = [
     ("ROEDER, SIMONE ELKE / SIMONE ELKE ROEDER", "852 6263 4569", "4213276", ""),
     ("王凯珮 / HOI PUI, WONG", "852 6858 8410", "10068", "Z411582(2)"),
     ("马坚 / Jian MA", "189 1770 2918", "320103196607089512", "320103196607089512"),
-    ("卢江 / Jiang LU", "158 0045 6521", "420521198809280021", "420521198809280021"),
-    ("孟周聪 / Zhoucong Meng", "135 6434 5029", "310113198307243215", "310113198307243215"),
-    ("张帆 / Fan ZHANG", "138 0135 1294", "211002197306050057", "211002197306050057"),
+    ("卢江 / Jiang LU", "158 0045 6521", "10302", "420521198809280021"),
+    ("孟周聪 / Zhoucong Meng", "135 6434 5029", "10303", "310113198307243215"),
+    ("张帆 / Fan ZHANG", "138 0135 1294", "2552356", "211002197306050057"),
     ("魏思远 / Siyuan WEI", "133 2110 4588", "230102198911054315", "230102198911054315"),
     ("王晟磊 / Shenglei WANG", "150 2689 7493", "310109198409264012", "310109198409264012"),
     ("Nathon Andrew G, NORBERG / Nathon Andrew G NORBERG", "186 0019 4610", "3050802", "A04700868"),
@@ -71,7 +71,7 @@ BUILTIN_CREW_DATA = [
     ("刘凯 / Kai LIU", "135 2157 9157", "2833670", "230103198103275511"),
     ("詹佩佩 / Peipei ZHAN", "137 1440 5925", "10283", "440301198809275123"),
     ("花佩 / Pei HUA", "186 2631 0634", "ZN00495", "320281198911117761"),
-    ("翁英 / Ying WENG", "130 6785 2000", "ZN00905", "330106198801182024"),
+    ("翁英 / YING WENG", "130 6785 2000", "ZN00905", "330106198801182024"),
     ("王莹 / Ying WANG", "159 1009 9069", "370125199004215621", "370125199004215621"),
     ("程佳俊 / Jiajun CHENG", "134 8010 3029", "511202198208161358", "511202198208161358"),
     ("蔡雨桐 / Yu Tong CHOI", "852 6426 7445", "10269", "V146532(5)"),
@@ -574,21 +574,36 @@ def _ensure_passenger_rows(ws, data_start_row, needed_count):
             try: ws.unmerge_cells(str(mr))
             except: pass
     ws.insert_rows(end_row, extra)
+    
+    # 插入后，重新应用受影响的合并单元格
     for min_r, min_c, max_r, max_c in affected:
         if min_r >= end_row: new_min_r, new_max_r = min_r + extra, max_r + extra
         else: new_min_r, new_max_r = min_r, max_r + extra
         rng = (f"{get_column_letter(min_c)}{new_min_r}:" f"{get_column_letter(max_c)}{new_max_r}")
         try: ws.merge_cells(rng)
         except: pass
+        
     for r in list(ws.row_dimensions.keys()):
         if r >= end_row:
             try: del ws.row_dimensions[r]
             except: pass
     for old_r, h in saved_heights.items(): ws.row_dimensions[old_r + extra].height = h
+    
+    # 复制样式和模板行的合并单元格到新行
+    template_merges = []
+    for mr in list(ws.merged_cells.ranges):
+        if mr.min_row == template_row and mr.max_row == template_row:
+            template_merges.append((mr.min_col, mr.max_col))
+
     for i in range(extra):
         new_row = end_row + i
         for c, snap in template_styles.items(): _style_apply(ws.cell(new_row, c), snap)
         if template_height: ws.row_dimensions[new_row].height = template_height
+        for min_c, max_c in template_merges:
+            rng = (f"{get_column_letter(min_c)}{new_row}:" f"{get_column_letter(max_c)}{new_row}")
+            try: ws.merge_cells(rng)
+            except: pass
+            
     return data_start_row
 
 # ================================================================
@@ -652,6 +667,13 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
         for i, pax in enumerate(passenger_list):
             row_num = passenger_start_row + i
             pax_name = extract_chinese_name(pax["name"])
+            
+            # ★ 强制把每个乘客行的 F 和 G 列合并，以容纳更长的身份证号
+            try:
+                ws.merge_cells(start_row=row_num, start_column=6, end_row=row_num, end_column=7)
+            except Exception:
+                pass
+                
             safe_set_cell_value(ws, row_num, 1, pax_name)
             safe_set_cell_value(ws, row_num, 2, pax.get("gender", ""))
             safe_set_cell_value(ws, row_num, 3, pax.get("dob", ""))
