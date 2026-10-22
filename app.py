@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-专用：备案表生成（支持总调模板 & 华东区内模板，锁定图片宽高版）
+专用：备案表生成（支持总调模板 & 华东区内模板）
 """
 
 import streamlit as st
@@ -10,12 +10,8 @@ from io import BytesIO
 from openpyxl import load_workbook
 from openpyxl.styles import Font
 from openpyxl.cell.cell import MergedCell
-from openpyxl.drawing.image import Image as OpenpyxlImage
 import re
-import json
 from datetime import datetime, timedelta
-import sys
-import os
 from copy import copy as _copy_style
 
 # ---------- 页面设置 ----------
@@ -23,14 +19,19 @@ st.set_page_config(page_title="备案表自动生成", layout="wide")
 st.title("📋 备案表自动生成（支持总调 / 华东区内）")
 
 # ================================================================
-# 内置数据与工具函数
+# 内置机组数据
+# 规则：
+#   - 中国籍（有 18 位大陆身份证）→ 执照号 = 身份证号（硬编码字面值）
+#   - 中国香港 / 中国澳门 / 中国台湾省 → 保留原执照号
+#   - 外籍 → 保留原执照号（真实护照/执照）
+# 格式：(姓名, 联系方式, 执照号码, 证件号码)
 # ================================================================
 BUILTIN_CREW_DATA = [
     ("庚凡", "139 2463 9747", "430104197901184015", "430104197901184015"),
     ("张永一 / Yongyi ZHANG", "139 0125 9544", "110102196605202336", "110102196605202336"),
     ("马洪双 / Hongshuang MA", "156 2062 3177", "210726197306234110", "210726197306234110"),
-    ("梅峰 / Feng MEI", "135 0967 8127", "17205/1 FCL", "510107197911242636"),
-    ("王斌 / Bin WANG", "139 2527 2867", "3340398", "610104197911058331"),
+    ("梅峰 / Feng MEI", "135 0967 8127", "510107197911242636", "510107197911242636"),
+    ("王斌 / Bin WANG", "139 2527 2867", "610104197911058331", "610104197911058331"),
     ("王少雄 / Shaoxiong WANG", "186 8387 9841", "510105198609042555", "510105198609042555"),
     ("苗旺旺 / Wangwang MIAO", "138 1871 5251", "410781198608019797", "410781198608019797"),
     ("赵岩松 / Yansong ZHAO", "186 1161 8385", "410103197004017014", "410103197004017014"),
@@ -40,13 +41,13 @@ BUILTIN_CREW_DATA = [
     ("尤欣 / Xin YOU", "139 1608 5072", "620102197604293015", "620102197604293015"),
     ("李亚民 / Yamin Li", "133 6632 0878", "350104197107184915", "350104197107184915"),
     ("赵镭 / Lei ZHAO", "138 0883 9660", "440301198204157271", "440301198204157271"),
-    ("彭罡", "186 1263 1888", "3240393", "440111198403244812"),
+    ("彭罡", "186 1263 1888", "440111198403244812", "440111198403244812"),
     ("胡君量 / Wan Leung WU / Kwan Leung WU", "132 6695 8816", "3025478", "124133200"),
     ("吴鹏", "136 1110 5901", "130103197602102115", "130103197602102115"),
     ("刘汇川", "188 5827 2791", "330103199003191618", "330103199003191618"),
-    ("于龙飞", "156 5288 0812", "ZN00915", "210103198808123928"),
+    ("于龙飞", "156 5288 0812", "210103198808123928", "210103198808123928"),
     ("林帅", "138 1156 6711", "110227198601130015", "110227198601130015"),
-    ("张佳妮 / Jiani ZHANG", "136 6169 9966", "10183", "31010619840115002X"),
+    ("张佳妮 / Jiani ZHANG", "136 6169 9966", "31010619840115002X", "31010619840115002X"),
     ("张欢乐 / Huanle ZHANG", "186 1652 1529", "330381198705292523", "330381198705292523"),
     ("昝昭君 / Zhaojun ZAN", "182 9570 0579", "14272419950203313X", "14272419950203313X"),
     ("孙赫 / He SUN", "186 0102 1216", "410102197702243012", "410102197702243012"),
@@ -57,43 +58,43 @@ BUILTIN_CREW_DATA = [
     ("ROEDER, SIMONE ELKE / SIMONE ELKE ROEDER", "852 6263 4569", "4213276", ""),
     ("王凯珮 / HOI PUI, WONG", "852 6858 8410", "10068", "Z411582(2)"),
     ("马坚 / Jian MA", "189 1770 2918", "320103196607089512", "320103196607089512"),
-    ("卢江 / Jiang LU", "158 0045 6521", "10302", "420521198809280021"),
-    ("孟周聪 / Zhoucong Meng", "135 6434 5029", "10303", "310113198307243215"),
-    ("张帆 / Fan ZHANG", "138 0135 1294", "2552356", "211002197306050057"),
+    ("卢江 / Jiang LU", "158 0045 6521", "420521198809280021", "420521198809280021"),
+    ("孟周聪 / Zhoucong Meng", "135 6434 5029", "310113198307243215", "310113198307243215"),
+    ("张帆 / Fan ZHANG", "138 0135 1294", "211002197306050057", "211002197306050057"),
     ("魏思远 / Siyuan WEI", "133 2110 4588", "230102198911054315", "230102198911054315"),
     ("王晟磊 / Shenglei WANG", "150 2689 7493", "310109198409264012", "310109198409264012"),
     ("Nathon Andrew G, NORBERG / Nathon Andrew G NORBERG", "186 0019 4610", "3050802", "A04700868"),
     ("Keith Robert, SHERREN / Keith Robert SHERREN", "137 3540 9744", "2755204", "P024165FF"),
     ("Rodolfo, BONETTI / Rodolfo BONETTI", "132 6284 1083", "12660", ""),
-    ("危慧 / Hui WEI", "152 1349 1328", "10137", "43072119941115468X"),
-    ("李辛欣 / Xinxin LI", "135 5008 8666", "4209424", "510105198605023015"),
+    ("危慧 / Hui WEI", "152 1349 1328", "43072119941115468X", "43072119941115468X"),
+    ("李辛欣 / Xinxin LI", "135 5008 8666", "510105198605023015", "510105198605023015"),
     ("Herve Daniel, STAMM / Herve Daniel STAMM", "183 1709 0300", "2666622", "M578620(2)"),
-    ("樊婉程 / Wancheng FAN", "186 2017 4817", "ZN00434", "440106199608180326"),
-    ("刘爽 / Shuang LIU", "138 0125 8789", "4101498", "110108196308296450"),
-    ("刘凯 / Kai LIU", "135 2157 9157", "2833670", "230103198103275511"),
-    ("詹佩佩 / Peipei ZHAN", "137 1440 5925", "10283", "440301198809275123"),
-    ("花佩 / Pei HUA", "186 2631 0634", "ZN00495", "320281198911117761"),
-    ("翁英 / YING WENG", "130 6785 2000", "ZN00905", "330106198801182024"),
+    ("樊婉程 / Wancheng FAN", "186 2017 4817", "440106199608180326", "440106199608180326"),
+    ("刘爽 / Shuang LIU", "138 0125 8789", "110108196308296450", "110108196308296450"),
+    ("刘凯 / Kai LIU", "135 2157 9157", "230103198103275511", "230103198103275511"),
+    ("詹佩佩 / Peipei ZHAN", "137 1440 5925", "440301198809275123", "440301198809275123"),
+    ("花佩 / Pei HUA", "186 2631 0634", "320281198911117761", "320281198911117761"),
+    ("翁英 / YING WENG", "130 6785 2000", "330106198801182024", "330106198801182024"),
     ("王莹 / Ying WANG", "159 1009 9069", "370125199004215621", "370125199004215621"),
     ("程佳俊 / Jiajun CHENG", "134 8010 3029", "511202198208161358", "511202198208161358"),
     ("蔡雨桐 / Yu Tong CHOI", "852 6426 7445", "10269", "V146532(5)"),
     ("俞凯 / Kai YU", "130 0579 0326", "120110196912180351", "120110196912180351"),
     ("杨杰 / Jie YANG", "186 1694 8903", "310104198411304413", "310104198411304413"),
     ("徐卓 / Zhuo XU", "139 1028 5510", "110105198906307113", "110105198906307113"),
-    ("丁燕栒 / Yanxun DING", "135 6035 3829", "ZN00499", "440510199107260826"),
+    ("丁燕栒 / Yanxun DING", "135 6035 3829", "440510199107260826", "440510199107260826"),
     ("万虹波 / Hongbo WAN", "133 1297 9906", "36050219860709003X", "36050219860709003X"),
-    ("王国勤 / Guoqin WANG", "138 1815 8715", "2589322", "340822197610240215"),
-    ("李潇恩 / Xiaoen LI", "158 0599 1600", "ZN00468", "510802199512100046"),
+    ("王国勤 / Guoqin WANG", "138 1815 8715", "340822197610240215", "340822197610240215"),
+    ("李潇恩 / Xiaoen LI", "158 0599 1600", "510802199512100046", "510802199512100046"),
     ("孙辉 / Hui Sun", "139 1626 9572", "310228197810012612", "310228197810012612"),
-    ("范蕾蕾 / Leilei FAN", "182 1000 6866", "ZN00347", "37010319861027002X"),
+    ("范蕾蕾 / Leilei FAN", "182 1000 6866", "37010319861027002X", "37010319861027002X"),
     ("张贺新 / Hexin ZHANG", "136 3773 1210", "420106197101020435", "420106197101020435"),
-    ("李庆宏 / Qinghong LI", "135 0909 0503", "17260/1 FCL", "441402199107140256"),
+    ("李庆宏 / Qinghong LI", "135 0909 0503", "441402199107140256", "441402199107140256"),
     ("Eduard Pascal, Roski / Eduard Pascal Roski", "49 170 1534666", "3863535", "C9TR22VZM"),
     ("Peter Robert, JACKSON / Peter Robert JACKSON", "186 8245 1935", "000044197906253001", "000044197906253001"),
-    ("廉卓群 / Zhuoqun LIAN", "133 5632 3949", "ZN00430", "370402199702018029"),
+    ("廉卓群 / Zhuoqun LIAN", "133 5632 3949", "370402199702018029", "370402199702018029"),
     ("孙浩 / Hao SUN", "136 7012 1990", "650103199102160037", "650103199102160037"),
-    ("姚艳阁 / Yange YAO", "156 0127 9399", "10204", "130922199601151224"),
-    ("茅邂文 / Xiewen MAO", "152 5181 7375", "ZN00903", "320683199911098627"),
+    ("姚艳阁 / Yange YAO", "156 0127 9399", "130922199601151224", "130922199601151224"),
+    ("茅邂文 / Xiewen MAO", "152 5181 7375", "320683199911098627", "320683199911098627"),
     ("宋炜 / Wei SONG", "136 3256 5565", "37060219820621211X", "37060219820621211X"),
     ("BEEBE, Thaddeus John / Thaddeus John BEEBE", "852 6930 1609", "2743899", "R909452(A)"),
     ("张哲 / Zhe ZHANG", "139 0247 5026", "650104196604163310", "650104196604163310"),
@@ -116,7 +117,7 @@ BUILTIN_CREW_DATA = [
     ("谢依椿", "159 8942 4501", "441427198601221716", "441427198601221716"),
     ("廖关荣", "181 0755 9103", "360732199009095838", "360732199009095838"),
     ("林峰", "135 2260 7955", "150402198501122713", "150402198501122713"),
-    ("丘东", "136 0044 6505", "11010119650406453x", "11010119650406453x"),
+    ("丘东", "136 0044 6505", "11010119650406453X", "11010119650406453X"),
     ("王庆辉", "134 8013 9352", "350627198212052013", "350627198212052013"),
     ("姜磊", "135 1006 5318", "360502198312071333", "360502198312071333"),
     ("黄彦杰", "132 1157 2184", "450881199810196233", "450881199810196233"),
@@ -139,6 +140,19 @@ BUILTIN_CREW_DATA = [
     ("Daniel, RICHTER", "374 9521 3832", "2556011", "C4W9RFH14"),
     ("郭春旭 / Guo Chunxu", "138 0136 1720", "110107197305150016", "110107197305150016"),
     ("黄海东", "138 0179 9315", "310105197506021215", "310105197506021215"),
+    # ── 以下 12 人为名单里有、代码表原先缺失的机组，联系方式/执照/证件待补 ──
+    ("王彦海 / Yanhai, Wang", "", "", ""),
+    ("沈志伟 / Chi Wai Calvin, SHIUM", "", "", ""),
+    ("Andrew Nigel, KING", "", "", ""),
+    ("杨华 / Hua, YANG", "", "", ""),
+    ("曾惠敏 / Irene, Tsang", "", "", ""),
+    ("Theng Theng, LEE", "", "", ""),
+    ("张晶晶 / Jingjing, ZHANG", "", "", ""),
+    ("黄茜 / Qian, HUANG", "", "", ""),
+    ("Wing Leong, YEUNG", "", "", ""),
+    ("Mohammad Amirrudin, Bin Ameir", "", "", ""),
+    ("黄振龙 / Zhenlong, Huang", "", "", ""),
+    ("杨哲瀚 / Zhehan, Yang", "", "", ""),
 ]
 
 CREW_COLUMNS = ["姓名", "联系方式", "执照号码", "证件号码"]
@@ -235,18 +249,23 @@ def find_id(crew_name): return _find_crew_field(crew_name, "证件号码")
 
 def is_18digit_id_card(val):
     if not val: return False
-    s = re.sub(r'\s+', '', str(val))
-    return bool(re.match(r'^[0-9]{17}[0-9Xx]$', s))
+    s = re.sub(r'\s+', '', str(val)).upper()
+    return bool(re.match(r'^[0-9]{17}[0-9X]$', s))
 
 def resolve_crew_id_and_license(crew_name, fallback_passport=""):
     """
-    - 18 位身份证（名单里 match 到有效身份证号）→ 执照号也填身份证号
-    - 否则：证件号取名单值，名单为空回退到 GD 单的护照号；执照号取名单值
+    兜底逻辑（主要针对 GD 单里出现、但不在名单里的新面孔）：
+    - 名单里匹配到 → 用名单
+    - 名单里没匹配到，但 GD 单给了 18 位身份证 → 执照号也填身份证号
     """
     id_val = find_id(crew_name)
     license_val = find_license(crew_name)
+    if id_val and license_val:
+        return id_val, license_val
     if is_18digit_id_card(id_val):
         return id_val, id_val
+    if not id_val and is_18digit_id_card(fallback_passport):
+        return fallback_passport, fallback_passport
     return (id_val if id_val else fallback_passport), license_val
 
 def parse_document_type(passport_no, doc_type):
@@ -260,7 +279,7 @@ def parse_document_type(passport_no, doc_type):
     if re.match(r'^[0-9]{15}$', pn) or re.match(r'^[0-9]{17}[0-9Xx]$', pn): return "身份证"
     return "护照"
 
-# ★ 彻底修复 MergedCell 报错的终极安全函数
+# ---------- 单元格安全设置 ----------
 def safe_set_cell_value(ws, row, col, value):
     cell = ws.cell(row=row, column=col)
     if isinstance(cell, MergedCell):
@@ -286,6 +305,7 @@ def get_value_right(ws, row, start_col):
             return str(cell.value).strip()
     return ""
 
+# ---------- 时间/日期工具 ----------
 def parse_utc_to_beijing(utc_str, date_str):
     try:
         time_part = utc_str.replace('Z', '').strip()
@@ -577,15 +597,10 @@ def _find_first_content_row(ws, start_row, max_scan=300):
             if v is not None and str(v).strip(): return r
     return None
 
-
-# ================================================================
-# ★ 修复后的核心行插入逻辑（对齐原第二段代码方案）
-# ================================================================
 def _shift_images_down(ws, end_row, extra):
-    """按插入行数平移图片行号，保留原锚点类型（不改变缩放/宽高语义）。"""
     if extra <= 0:
         return
-    end_row_0 = end_row - 1  # openpyxl 内部 row 索引从 0 开始
+    end_row_0 = end_row - 1
     for img in getattr(ws, '_images', []) or []:
         anchor = getattr(img, 'anchor', None)
         if anchor is None:
@@ -604,43 +619,25 @@ def _shift_images_down(ws, end_row, extra):
         if not need_shift:
             continue
         if frm is not None:
-            try:
-                frm.row = frm.row + extra
-            except Exception:
-                pass
+            try: frm.row = frm.row + extra
+            except Exception: pass
         if to is not None:
-            try:
-                to.row = to.row + extra
-            except Exception:
-                pass
-
+            try: to.row = to.row + extra
+            except Exception: pass
 
 def _ensure_passenger_rows(ws, data_start_row, needed_count):
-    """
-    在乘客区末尾（end_row = 乘客区下边界）插入足够的空行。
-    - 样式从 end_row - 1（最后一行真实乘客行）复制，保证与模板一致；
-    - 保留 end_row 之后所有行的行高、合并；
-    - 图片按行号平移（保留原锚点类型），不改变图片显示大小。
-    """
     if needed_count <= 0:
         return data_start_row
-
     from openpyxl.utils import get_column_letter
-
     end_row = _find_first_content_row(ws, data_start_row)
     if end_row is None:
         return data_start_row
-
     existing_rows = end_row - data_start_row
     if needed_count <= existing_rows:
         return data_start_row
-
     extra = needed_count - existing_rows
-    template_row = end_row - 1  # 最后一行真实乘客行
-
+    template_row = end_row - 1
     max_col = ws.max_column or 10
-
-    # 向上找最近一个带合并的模板行，用于复制合并样式
     merge_template_row = template_row
     for r in range(template_row, data_start_row - 1, -1):
         hit = False
@@ -651,66 +648,40 @@ def _ensure_passenger_rows(ws, data_start_row, needed_count):
         if hit:
             merge_template_row = r
             break
-
-    template_styles = {
-        c: _style_snapshot(ws.cell(template_row, c))
-        for c in range(1, max_col + 1)
-    }
+    template_styles = {c: _style_snapshot(ws.cell(template_row, c)) for c in range(1, max_col + 1)}
     template_height = ws.row_dimensions[template_row].height
-
     template_merges = []
     for mr in list(ws.merged_cells.ranges):
         if mr.min_row == merge_template_row and mr.max_row == merge_template_row:
             template_merges.append((mr.min_col, mr.max_col))
-
-    # 保存 end_row 之后所有行高
     max_row = ws.max_row
     saved_heights = {}
     for r in range(end_row, max_row + 1):
         h = ws.row_dimensions[r].height
         if h is not None:
             saved_heights[r] = h
-
-    # 暂存并解除受影响合并
     affected = []
     for mr in list(ws.merged_cells.ranges):
         if mr.min_row >= end_row or mr.min_row < end_row <= mr.max_row:
             affected.append((mr.min_row, mr.min_col, mr.max_row, mr.max_col))
-            try:
-                ws.unmerge_cells(str(mr))
-            except Exception:
-                pass
-
-    # 在 end_row 处插入，即在乘客区末尾追加
+            try: ws.unmerge_cells(str(mr))
+            except Exception: pass
     ws.insert_rows(end_row, extra)
-
-    # ★ 只平移图片行号，保留原锚点类型与宽高
     _shift_images_down(ws, end_row, extra)
-
-    # 恢复合并
     for min_r, min_c, max_r, max_c in affected:
         if min_r >= end_row:
             new_min_r, new_max_r = min_r + extra, max_r + extra
         else:
             new_min_r, new_max_r = min_r, max_r + extra
-        rng = (f"{get_column_letter(min_c)}{new_min_r}:"
-               f"{get_column_letter(max_c)}{new_max_r}")
-        try:
-            ws.merge_cells(rng)
-        except Exception:
-            pass
-
-    # 恢复行高（整体下移 extra 行）
+        rng = (f"{get_column_letter(min_c)}{new_min_r}:{get_column_letter(max_c)}{new_max_r}")
+        try: ws.merge_cells(rng)
+        except Exception: pass
     for r in list(ws.row_dimensions.keys()):
         if r >= end_row:
-            try:
-                del ws.row_dimensions[r]
-            except Exception:
-                pass
+            try: del ws.row_dimensions[r]
+            except Exception: pass
     for old_r, h in saved_heights.items():
         ws.row_dimensions[old_r + extra].height = h
-
-    # 填充新插入行的样式与合并
     for i in range(extra):
         new_row = end_row + i
         for c, snap in template_styles.items():
@@ -718,37 +689,28 @@ def _ensure_passenger_rows(ws, data_start_row, needed_count):
         if template_height:
             ws.row_dimensions[new_row].height = template_height
         for min_c, max_c in template_merges:
-            rng = (f"{get_column_letter(min_c)}{new_row}:"
-                   f"{get_column_letter(max_c)}{new_row}")
-            try:
-                ws.merge_cells(rng)
-            except Exception:
-                pass
-
+            rng = (f"{get_column_letter(min_c)}{new_row}:{get_column_letter(max_c)}{new_row}")
+            try: ws.merge_cells(rng)
+            except Exception: pass
     return data_start_row
 
-
 # ================================================================
-# 核心填充逻辑
+# 华东模板
 # ================================================================
 def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, route_display):
     try:
         wb = load_workbook(template_bytes)
-    except Exception as e:
+    except Exception:
         raise RuntimeError("❌ 模板文件解析失败。请确保你上传的是真正的 `.xlsx` 格式（请用 Excel 打开文件，选择“另存为”，格式选 Excel 工作簿(*.xlsx)），而不是直接修改后缀名。")
-
     ws = wb.active
 
-    # 1. 飞行性质（第6行，B列）
     safe_set_cell_value(ws, 6, 2, "调机" if not passenger_list else "商务")
 
-    # 2. 飞行信息（第10行，B=机型 C=注册号 D=航班号 E=行程）
     safe_set_cell_value(ws, 10, 2, data.get("ac_type", ""))
     safe_set_cell_value(ws, 10, 3, data.get("reg", ""))
     safe_set_cell_value(ws, 10, 4, data.get("flt", ""))
     safe_set_cell_value(ws, 10, 5, route_display if route_display else "")
 
-    # 3. 机组信息（华东模板固定从 15 行开始）
     role_map = {}
     for cr in crew_rows:
         role = str(cr.get("职务", "")).strip()
@@ -760,7 +722,7 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
         if cr and str(cr.get("姓名", "")).strip() not in ("", "无"):
             name_val = str(cr.get("姓名", "")).strip()
             safe_set_cell_value(ws, row_num, 2, name_val)
-            _style_name_cell(ws, row_num, 2, name_val)       # ← 长名自动缩字 + 换行
+            _style_name_cell(ws, row_num, 2, name_val)
             safe_set_cell_value(ws, row_num, 3, cr.get("性别", ""))
             safe_set_cell_value(ws, row_num, 4, cr.get("出生日期", ""))
             safe_set_cell_value(ws, row_num, 5, cr.get("国籍", ""))
@@ -773,18 +735,14 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
             for c in range(2, 8):
                 safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
 
-    # 4. 乘客信息（华东模板从 23 行开始，自动在末尾追加）
     if passenger_list:
         start_row = 23
         passenger_start_row = _ensure_passenger_rows(ws, start_row, len(passenger_list))
         for i, pax in enumerate(passenger_list):
             row_num = passenger_start_row + i
             pax_name = extract_chinese_name(pax["name"])
-            try:
-                ws.merge_cells(start_row=row_num, start_column=6, end_row=row_num, end_column=7)
-            except Exception:
-                pass
-
+            try: ws.merge_cells(start_row=row_num, start_column=6, end_row=row_num, end_column=7)
+            except Exception: pass
             safe_set_cell_value(ws, row_num, 1, pax_name)
             safe_set_cell_value(ws, row_num, 2, pax.get("gender", ""))
             safe_set_cell_value(ws, row_num, 3, pax.get("dob", ""))
@@ -795,22 +753,22 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
             safe_set_cell_value(ws, row_num, 6, pax.get("passport_no", ""))
             for col_idx in range(1, 7):
                 safe_set_cell_font(ws, row_num, col_idx, Font(name='宋体', size=16))
-            _style_name_cell(ws, row_num, 1, pax_name)       # ← 基于 16pt 自动缩字（必须在字体设置之后）
+            _style_name_cell(ws, row_num, 1, pax_name)
 
     output = BytesIO()
     wb.save(output); output.seek(0)
     return output
 
-
+# ================================================================
+# 总调模板
+# ================================================================
 def fill_template_general(template_bytes, data, crew_rows, passenger_list, route_display):
     try:
         wb = load_workbook(template_bytes)
-    except Exception as e:
+    except Exception:
         raise RuntimeError("❌ 模板文件解析失败。请确保你上传的是真正的 `.xlsx` 格式（请用 Excel 打开文件，选择“另存为”，格式选 Excel 工作簿(*.xlsx)），而不是直接修改后缀名。")
-
     ws = wb.active
 
-    # 飞行目的
     if not passenger_list:
         for row in ws.iter_rows(min_row=1, max_row=10):
             for cell in row:
@@ -818,7 +776,6 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
                     safe_set_cell_value(ws, cell.row + 1, 2, "调机")
                     break
 
-    # 飞行信息
     info_row = None
     for row in ws.iter_rows(min_row=1, max_row=20):
         for cell in row:
@@ -838,7 +795,6 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
                 break
         safe_set_cell_value(ws, data_row, route_col, route_display if route_display else "")
 
-    # 机组（总调模板固定从 13 行开始）
     role_map = {}
     for cr in crew_rows:
         role = str(cr.get("职务", "")).strip()
@@ -859,7 +815,6 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
         else:
             for c in range(2, 8): safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
 
-    # 乘客（总调模板从 19 行开始，自动在末尾追加）
     if passenger_list:
         start_row = 19
         passenger_start_row = _ensure_passenger_rows(ws, start_row, len(passenger_list))
@@ -881,13 +836,11 @@ def fill_template_general(template_bytes, data, crew_rows, passenger_list, route
     wb.save(output); output.seek(0)
     return output
 
-
 def fill_template(template_bytes, data, crew_rows, passenger_list, route_display, is_east_china):
     if is_east_china:
         return fill_template_east_china(template_bytes, data, crew_rows, passenger_list, route_display)
     else:
         return fill_template_general(template_bytes, data, crew_rows, passenger_list, route_display)
-
 
 # ================================================================
 # 页面逻辑
@@ -900,7 +853,6 @@ if data_file and template_file:
     try:
         is_east_china = False
         file_name = template_file.name.lower()
-
         if "华东" in file_name:
             is_east_china = True
         elif "总调" in file_name:
@@ -917,34 +869,23 @@ if data_file and template_file:
                         else:
                             is_east_china = False
                         break
-            except:
-                pass
+            except: pass
 
-        if is_east_china:
-            show_cols = CREW_FILL_COLUMNS_EAST
-        else:
-            show_cols = CREW_FILL_COLUMNS_GENERAL
+        show_cols = CREW_FILL_COLUMNS_EAST if is_east_china else CREW_FILL_COLUMNS_GENERAL
 
         data, crew_list, passenger_list = parse_general_declaration(data_file)
 
         st.subheader("📋 本次机组信息（可编辑）")
-        st.caption(
-            "系统已从内置名单匹配出**将要写入的证件号码 / 执照号码 / 联系方式**，"
-            "如有出入可直接在表格里修改（也可改姓名、性别、出生日期或调整职务）。"
-            "改完下方下载按钮生成的就是最新数据。"
-        )
+        st.caption("系统已从内置名单匹配出**将要写入的证件号码 / 执照号码 / 联系方式**，如有出入可直接在表格里修改（也可改姓名、性别、出生日期或调整职务）。改完下方下载按钮生成的就是最新数据。")
 
         role_order = ["机长", "副驾驶", "乘务", "机务"]
         role_rows = {r: None for r in role_order}
         overflow_rows = []
-
         has_unknown_nation = False
 
         for idx, crew in enumerate(crew_list):
             name_cn = extract_chinese_name(crew["name"])
-            id_val, lic_val = resolve_crew_id_and_license(
-                crew["name"], crew.get("passport_no", "")
-            )
+            id_val, lic_val = resolve_crew_id_and_license(crew["name"], crew.get("passport_no", ""))
             contact = find_contact(crew["name"])
 
             raw_nat = str(crew.get("nationality", "")).strip().upper()
@@ -967,16 +908,11 @@ if data_file and template_file:
                 preferred_role = "乘务" if gender in ["女", "Female", "F"] else "机务"
 
             row = {
-                "职务": preferred_role,
-                "姓名": name_cn,
-                "性别": crew.get("gender", ""),
-                "出生日期": crew.get("dob", ""),
-                "证件号码": id_val,
-                "执照号码": lic_val,
-                "联系方式": contact,
-                "国籍": nation
+                "职务": preferred_role, "姓名": name_cn,
+                "性别": crew.get("gender", ""), "出生日期": crew.get("dob", ""),
+                "证件号码": id_val, "执照号码": lic_val,
+                "联系方式": contact, "国籍": nation,
             }
-
             if role_rows.get(preferred_role) is None: role_rows[preferred_role] = row
             else: overflow_rows.append(row)
 
@@ -984,8 +920,7 @@ if data_file and template_file:
         for role in role_order:
             if role_rows[role] is not None: initial_rows.append(role_rows[role])
             else:
-                empty_row = {"职务": role, "姓名": "无", "性别": "", "出生日期": "", "证件号码": "", "执照号码": "", "联系方式": "", "国籍": ""}
-                initial_rows.append(empty_row)
+                initial_rows.append({"职务": role, "姓名": "无", "性别": "", "出生日期": "", "证件号码": "", "执照号码": "", "联系方式": "", "国籍": ""})
         initial_rows.extend(overflow_rows)
 
         if overflow_rows:
@@ -997,7 +932,6 @@ if data_file and template_file:
 
         crew_signature = "|".join([c.get("name", "") for c in crew_list])
         editor_key = f"crew_fill_editor_{abs(hash(crew_signature)) % (10**8)}"
-
         df_fill = pd.DataFrame(initial_rows, columns=show_cols)
 
         col_config = {
@@ -1013,15 +947,7 @@ if data_file and template_file:
         else:
             col_config["联系方式"] = st.column_config.TextColumn("联系方式", width="medium")
 
-        edited_crew_df = st.data_editor(
-            df_fill,
-            num_rows="dynamic",
-            width="stretch",
-            height=280,
-            key=editor_key,
-            column_config=col_config
-        )
-
+        edited_crew_df = st.data_editor(df_fill, num_rows="dynamic", width="stretch", height=280, key=editor_key, column_config=col_config)
         crew_for_template = edited_crew_df.fillna("").astype(str).to_dict("records") if not edited_crew_df.empty else []
 
         st.markdown("---")
@@ -1045,50 +971,4 @@ if data_file and template_file:
                         flight_no = str(matched_flight.get('航班号', '') or '').strip()
                         row_date = _extract_row_date(matched_flight.get('出发日期'))
                         date_hint = row_date.strftime("%m-%d") if row_date else "?"
-                        matched_note = f"✅ 已从航段数据自动匹配到飞行计划（航班号 {flight_no}，{from_code} → {to_code}，{date_hint}），已预填到下方输入框"
-
-        if not default_route:
-            if date_str and from_code and to_code:
-                bj_time = parse_utc_to_beijing(utc_time, date_str) if utc_time else "0000"
-                default_route = f"{date_display} {from_code} {bj_time} XXXX {to_code}"
-            else:
-                default_route = f"{from_code}-{to_code}" if from_code and to_code else ""
-
-        if not matched_note and flight_plan_file is not None and reg and from_code and to_code:
-            date_hint = f"{gd_date_parsed[0]}月{gd_date_parsed[1]}日" if gd_date_parsed else "未知日期"
-            st.info(f"ℹ️ 航段数据中未找到 {reg} {from_code}→{to_code}（{date_hint}）的匹配记录，已使用 GD单 信息生成默认值。")
-
-        raw_route = st.text_input(
-            "从Jetops复制航班信息并适当调整起落时间 比如： F B652S 08:00 - 14:00  柬埔寨金边 德崇 - 日本东京 羽田",
-            value=default_route
-        ).strip()
-
-        with_time = parse_with_time_route(raw_route, date_display)
-        route_display = with_time if (with_time != raw_route and with_time is not None) else (raw_route if raw_route else default_route)
-
-        no_time = parse_no_time_route(raw_route, date_display)
-        file_name_base = no_time if no_time is not None else (f"{date_display} {reg} {from_code}-{to_code}" if reg and from_code and to_code else route_display)
-
-        safe_file_name = re.sub(r'[\\/*?:"<>|]', "_", file_name_base).strip() or "备案表"
-        download_file_name = f"{safe_file_name}.xlsx"
-
-        try:
-            result_bytes = fill_template(template_file, data, crew_for_template, passenger_list, route_display, is_east_china).getvalue()
-        except Exception as e:
-            st.error(f"❌ 生成失败：{e}")
-            st.stop()
-
-        st.download_button(
-            label="⬇️ 下载填充后的备案表",
-            data=result_bytes,
-            file_name=download_file_name,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-        st.caption("⏳ 输入文件名之后稍等3秒钟后再点击下载")
-
-    except Exception as e:
-        st.error(f"❌ 处理失败：{e}")
-        st.stop()
-else:
-    st.info("👆 请同时上传 GD单 和 模板文件。")
+                        matched_note = f"✅ 已从航段数据自动匹配到飞行计划（航班号 {flight_no}，{from_code} → {to_code}，{date
