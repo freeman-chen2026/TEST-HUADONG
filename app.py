@@ -627,16 +627,25 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
     for role_name, row_num in roles_pos.items():
         cr = role_map.get(role_name)
         if cr and str(cr.get("姓名", "")).strip() not in ("", "无"):
-            safe_set_cell_value(ws, row_num, 2, cr.get("姓名", ""))
+            name_val = str(cr.get("姓名", "")).strip()
+            
+            # 从内置库重新获取最准确的数据，防止前端编辑器错位
+            actual_id = find_id(name_val)
+            actual_lic = find_license(name_val)
+            actual_phone = find_contact(name_val)
+            
+            # 如果内置库没查到，再用传进来的
+            if not actual_id: actual_id = str(cr.get("证件号码", "")).strip()
+            if not actual_lic: actual_lic = str(cr.get("执照号码", "")).strip()
+            if not actual_phone: actual_phone = str(cr.get("联系方式", "")).strip()
+            
+            safe_set_cell_value(ws, row_num, 2, name_val)
             safe_set_cell_value(ws, row_num, 3, cr.get("性别", ""))
             safe_set_cell_value(ws, row_num, 4, cr.get("出生日期", ""))
             
-            doc_no = str(cr.get("证件号码", "")).strip()
-            lic_no = str(cr.get("执照号码", "")).strip()
-            
-            # E列：国籍 (根据证件号判断)
+            # E列：国籍
             cell_e = ws.cell(row=row_num, column=5)
-            if is_18digit_id_card(doc_no) or doc_no == "":
+            if is_18digit_id_card(actual_id):
                 cell_e.value = "中国"
             else:
                 cell_e.value = "外籍"
@@ -644,12 +653,12 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
             
             # F列：证件号码
             cell_f = ws.cell(row=row_num, column=6)
-            cell_f.value = doc_no
+            cell_f.value = actual_id
             cell_f.font = Font(name='宋体', size=16)
             
             # G列：执照号码
             cell_g = ws.cell(row=row_num, column=7)
-            cell_g.value = lic_no
+            cell_g.value = actual_lic
             cell_g.font = Font(name='宋体', size=12)
         else:
             for c in range(2, 8):
