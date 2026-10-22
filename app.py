@@ -971,4 +971,45 @@ if data_file and template_file:
                         flight_no = str(matched_flight.get('航班号', '') or '').strip()
                         row_date = _extract_row_date(matched_flight.get('出发日期'))
                         date_hint = row_date.strftime("%m-%d") if row_date else "?"
-                        matched_note = f"✅ 已从航段数据自动匹配到飞行计划（航班号 {flight_no}，{from_code} → {to_code}，{date
+                        matched_note = f"✅ 已从航段数据自动匹配到飞行计划（航班号 {flight_no}，{from_code} → {to_code}，{date_hint}），已预填到下方输入框"
+
+        if not default_route:
+            if date_str and from_code and to_code:
+                bj_time = parse_utc_to_beijing(utc_time, date_str) if utc_time else "0000"
+                default_route = f"{date_display} {from_code} {bj_time} XXXX {to_code}"
+            else:
+                default_route = f"{from_code}-{to_code}" if from_code and to_code else ""
+
+        if not matched_note and flight_plan_file is not None and reg and from_code and to_code:
+            date_hint = f"{gd_date_parsed[0]}月{gd_date_parsed[1]}日" if gd_date_parsed else "未知日期"
+            st.info(f"ℹ️ 航段数据中未找到 {reg} {from_code}→{to_code}（{date_hint}）的匹配记录，已使用 GD单 信息生成默认值。")
+
+        raw_route = st.text_input("从Jetops复制航班信息并适当调整起落时间 比如： F B652S 08:00 - 14:00  柬埔寨金边 德崇 - 日本东京 羽田", value=default_route).strip()
+
+        with_time = parse_with_time_route(raw_route, date_display)
+        route_display = with_time if (with_time != raw_route and with_time is not None) else (raw_route if raw_route else default_route)
+
+        no_time = parse_no_time_route(raw_route, date_display)
+        file_name_base = no_time if no_time is not None else (f"{date_display} {reg} {from_code}-{to_code}" if reg and from_code and to_code else route_display)
+
+        safe_file_name = re.sub(r'[\\/*?:"<>|]', "_", file_name_base).strip() or "备案表"
+        download_file_name = f"{safe_file_name}.xlsx"
+
+        try:
+            result_bytes = fill_template(template_file, data, crew_for_template, passenger_list, route_display, is_east_china).getvalue()
+        except Exception as e:
+            st.error(f"❌ 生成失败：{e}")
+            st.stop()
+
+        st.download_button(
+            label="⬇️ 下载填充后的备案表",
+            data=result_bytes, file_name=download_file_name,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        st.caption("⏳ 输入文件名之后稍等3秒钟后再点击下载")
+
+    except Exception as e:
+        st.error(f"❌ 处理失败：{e}")
+        st.stop()
+else:
+    st.info("👆 请同时上传 GD单 和 模板文件。")
