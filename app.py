@@ -140,7 +140,8 @@ BUILTIN_CREW_DATA = [
 ]
 
 CREW_COLUMNS = ["姓名", "联系方式", "执照号码", "证件号码"]
-CREW_FILL_COLUMNS = ["职务", "姓名", "性别", "出生日期", "证件号码", "执照号码", "联系方式"]
+CREW_FILL_COLUMNS_GENERAL = ["职务", "姓名", "性别", "出生日期", "证件号码", "执照号码", "联系方式"]
+CREW_FILL_COLUMNS_EAST = ["职务", "姓名", "性别", "出生日期", "国籍", "证件号码", "执照号码"]
 
 NATION_MAP = {
     "CHN": "中国", "HKG": "香港", "DEU": "德国", "USA": "美国", "GBR": "英国",
@@ -233,13 +234,6 @@ def is_18digit_id_card(val):
     if not val: return False
     s = re.sub(r'\s+', '', str(val))
     return bool(re.match(r'^[0-9]{17}[0-9Xx]$', s))
-
-def resolve_crew_id_and_license(crew_name, fallback_passport=""):
-    id_val = find_id(crew_name)
-    license_val = find_license(crew_name)
-    if is_18digit_id_card(id_val):
-        return id_val, id_val
-    return (id_val if id_val else fallback_passport), license_val
 
 def parse_document_type(passport_no, doc_type):
     doc_type_str = str(doc_type).strip() if pd.notna(doc_type) else ""
@@ -629,36 +623,23 @@ def fill_template_east_china(template_bytes, data, crew_rows, passenger_list, ro
         if cr and str(cr.get("姓名", "")).strip() not in ("", "无"):
             name_val = str(cr.get("姓名", "")).strip()
             
-            # 从内置库重新获取最准确的数据，防止前端编辑器错位
-            actual_id = find_id(name_val)
-            actual_lic = find_license(name_val)
-            actual_phone = find_contact(name_val)
-            
-            # 如果内置库没查到，再用传进来的
-            if not actual_id: actual_id = str(cr.get("证件号码", "")).strip()
-            if not actual_lic: actual_lic = str(cr.get("执照号码", "")).strip()
-            if not actual_phone: actual_phone = str(cr.get("联系方式", "")).strip()
-            
             safe_set_cell_value(ws, row_num, 2, name_val)
             safe_set_cell_value(ws, row_num, 3, cr.get("性别", ""))
             safe_set_cell_value(ws, row_num, 4, cr.get("出生日期", ""))
             
             # E列：国籍
             cell_e = ws.cell(row=row_num, column=5)
-            if is_18digit_id_card(actual_id):
-                cell_e.value = "中国"
-            else:
-                cell_e.value = "外籍"
+            cell_e.value = cr.get("国籍", "中国")
             cell_e.font = Font(name='宋体', size=16)
             
             # F列：证件号码
             cell_f = ws.cell(row=row_num, column=6)
-            cell_f.value = actual_id
+            cell_f.value = cr.get("证件号码", "")
             cell_f.font = Font(name='宋体', size=16)
             
             # G列：执照号码
             cell_g = ws.cell(row=row_num, column=7)
-            cell_g.value = actual_lic
+            cell_g.value = cr.get("执照号码", "")
             cell_g.font = Font(name='宋体', size=12)
         else:
             for c in range(2, 8):
@@ -821,6 +802,22 @@ flight_plan_file = st.file_uploader("（可选）上传航段数据导出（北�
 
 if data_file and template_file:
     try:
+        # 1. 识别模板类型
+        is_east_china = False
+        try:
+            wb_temp = load_workbook(template_file)
+            ws_temp = wb_temp.active
+            if ws_temp.cell(15, 7).value and "执照号码" in str(ws_temp.cell(15, 7).value):
+                is_east_china = True
+        except:
+            pass
+
+        # 2. 根据模板类型设置前端展示的列
+        if is_east_china:
+            show_cols = CREW_FILL_COLUMNS_EAST
+        else:
+            show_cols = CREW_FILL_COLUMNS_GENERAL
+
         data, crew_list, passenger_list = parse_general_declaration(data_file)
 
         st.subheader("📋 本次机组信息（可编辑）")
@@ -836,8 +833,10 @@ if data_file and template_file:
 
         for idx, crew in enumerate(crew_list):
             name_cn = extract_chinese_name(crew["name"])
-            id_fill, license_fill = resolve_crew_id_and_license(crew["name"], crew.get("passport_no", ""))
+            id_val = find_id(crew["name"]) or crew.get("passport_no", "")
+            lic_val = find_license(crew["name"])
             contact = find_contact(crew["name"])
+            nation = "中国" if is_18digit_id_card(id_val) or not id_val else "外籍"
 
             if idx == 0: preferred_role = "机长"
             elif idx == 1: preferred_role = "副驾驶"
@@ -850,9 +849,10 @@ if data_file and template_file:
                 "姓名": name_cn,
                 "性别": crew.get("gender", ""),
                 "出生日期": crew.get("dob", ""),
-                "证件号码": id_fill,
-                "执照号码": license_fill,
+                "证件号码": id_val,
+                "执照号码": lic_val,
                 "联系方式": contact,
+                "国籍": nation
             }
 
             if role_rows.get(preferred_role) is None: role_rows[preferred_role] = row
@@ -862,7 +862,8 @@ if data_file and template_file:
         for role in role_order:
             if role_rows[role] is not None: initial_rows.append(role_rows[role])
             else:
-                initial_rows.append({"职务": role, "姓名": "无", "性别": "", "出生日期": "", "证件号码": "", "执照号码": "", "联系方式": ""})
+                empty_row = {"职务": role, "姓名": "无", "性别": "", "出生日期": "", "证件号码": "", "执照号码": "", "联系方式": "", "国籍": ""}
+                initial_rows.append(empty_row)
         initial_rows.extend(overflow_rows)
 
         if overflow_rows:
@@ -872,18 +873,29 @@ if data_file and template_file:
         crew_signature = "|".join([c.get("name", "") for c in crew_list])
         editor_key = f"crew_fill_editor_{abs(hash(crew_signature)) % (10**8)}"
 
-        df_fill = pd.DataFrame(initial_rows, columns=CREW_FILL_COLUMNS)
+        # 3. 渲染可编辑表格（根据模板展示不同的列）
+        df_fill = pd.DataFrame(initial_rows, columns=show_cols)
+        
+        col_config = {
+            "职务": st.column_config.SelectboxColumn("职务", options=["机长", "副驾驶", "乘务", "机务"], width="small"),
+            "姓名": st.column_config.TextColumn("姓名", width="medium"),
+            "性别": st.column_config.TextColumn("性别", width="small"),
+            "出生日期": st.column_config.TextColumn("出生日期", width="medium"),
+            "证件号码": st.column_config.TextColumn("证件号码", width="medium"),
+            "执照号码": st.column_config.TextColumn("执照号码", width="medium"),
+        }
+        if is_east_china:
+            col_config["国籍"] = st.column_config.TextColumn("国籍", width="small")
+        else:
+            col_config["联系方式"] = st.column_config.TextColumn("联系方式", width="medium")
+
         edited_crew_df = st.data_editor(
-            df_fill, num_rows="dynamic", use_container_width=True, height=280, key=editor_key,
-            column_config={
-                "职务": st.column_config.SelectboxColumn("职务", options=["机长", "副驾驶", "乘务", "机务"], width="small"),
-                "姓名": st.column_config.TextColumn("姓名", width="medium"),
-                "性别": st.column_config.TextColumn("性别", width="small"),
-                "出生日期": st.column_config.TextColumn("出生日期", width="medium"),
-                "证件号码": st.column_config.TextColumn("证件号码", width="medium"),
-                "执照号码": st.column_config.TextColumn("执照号码", width="medium"),
-                "联系方式": st.column_config.TextColumn("联系方式", width="medium"),
-            },
+            df_fill, 
+            num_rows="dynamic", 
+            width="stretch", 
+            height=280, 
+            key=editor_key,
+            column_config=col_config
         )
 
         crew_for_template = edited_crew_df.fillna("").astype(str).to_dict("records") if not edited_crew_df.empty else []
@@ -937,7 +949,6 @@ if data_file and template_file:
         download_file_name = f"{safe_file_name}.xlsx"
 
         try:
-            # 直接调用 fill_template，不走缓存，保证每次反映最新数据
             result_bytes = fill_template(template_file, data, crew_for_template, passenger_list, route_display).getvalue()
         except Exception as e:
             st.error(f"❌ 生成失败：{e}")
