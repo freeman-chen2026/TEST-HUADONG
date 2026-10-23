@@ -266,7 +266,7 @@ with tab1:
         "B3926": "LJ60", "B652R": "GLF4", "B8105": "GLEX", "B8160": "GLF5",
         "B8262": "GLF4", "B8292": "GLF5", "B8309": "GLF5", "MLLIN": "GLEX",
         "N2QE": "GL5T", "N328LM": "GL7T", "N550DR": "GLF5", "N577QT": "F900",
-        "N7777U": "GLEX", "N777ZH": "GLF5", "N88AY": "GLF5", "T7178HT": "GL7T",
+        "N7777U": "GLEX", "N777ZH": "GLF6", "N88AY": "GLF5", "T7178HT": "GL7T",
         "T7CJK": "GLEX", "VPCSZ": "GL7T", "VPCVA": "GLF6", "B652Q": "GLF4",
         "B652S": "GLF4", "B65AP": "GLF4",
     }
