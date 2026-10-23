@@ -180,7 +180,6 @@ with tab1:
         ("Daniel, RICHTER", "374 9521 3832", "2556011", "C4W9RFH14"),
         ("郭春旭 / Guo Chunxu", "138 0136 1720", "110107197305150016", "110107197305150016"),
         ("黄海东", "138 0179 9315", "310105197506021215", "310105197506021215"),
-        # ── 以下 12 人为名单里有、代码表原先缺失的机组，联系方式/执照/证件待补 ──
         ("王彦海 / Yanhai, Wang", "", "", ""),
         ("沈志伟 / Chi Wai Calvin, SHIUM", "", "", ""),
         ("Andrew Nigel, KING", "", "", ""),
@@ -199,18 +198,68 @@ with tab1:
     CREW_FILL_COLUMNS_GENERAL = ["职务", "姓名", "性别", "出生日期", "证件号码", "执照号码", "联系方式"]
     CREW_FILL_COLUMNS_EAST = ["职务", "姓名", "性别", "出生日期", "国籍", "证件号码", "执照号码"]
 
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # 改动 1：NATION_MAP 大幅扩充
+    #  - 新增 MHL（马绍尔群岛）、NZL（新西兰）
+    #  - 补充公务机场景常见的其他国家/地区
+    #  未在字典内的三字码会被原样写入 Excel，并在页面顶部弹警告
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     NATION_MAP = {
+        # 中国及特别行政区
         "CHN": "中国", "HKG": "中国香港", "TWN": "中国台湾", "MAC": "中国澳门",
-        "DEU": "德国", "USA": "美国", "GBR": "英国", "FRA": "法国", "RUS": "俄罗斯",
-        "JPN": "日本", "KOR": "韩国", "SGP": "新加坡", "MYS": "马来西亚", "THA": "泰国",
-        "VNM": "越南", "PHL": "菲律宾", "IDN": "印度尼西亚", "IND": "印度", "AUS": "澳大利亚",
-        "CAN": "加拿大", "BRA": "巴西", "MEX": "墨西哥", "ZAF": "南非", "EGY": "埃及",
-        "NGA": "尼日利亚", "KEN": "肯尼亚", "TZA": "坦桑尼亚", "ZWE": "津巴布韦",
-        "NLD": "荷兰", "ITA": "意大利", "ESP": "西班牙", "PRT": "葡萄牙", "GRC": "希腊",
-        "TUR": "土耳其", "SAU": "沙特阿拉伯", "ARE": "阿联酋", "ISR": "以色列",
-        "IRN": "伊朗", "PAK": "巴基斯坦", "BGD": "孟加拉", "NPL": "尼泊尔",
-        "LKA": "斯里兰卡", "MMR": "缅甸", "KHM": "柬埔寨", "LAO": "老挝", "MNG": "蒙古",
-        "PRK": "朝鲜", "HUN": "匈牙利",
+        # 东亚、东南亚、南亚
+        "JPN": "日本", "KOR": "韩国", "PRK": "朝鲜", "MNG": "蒙古",
+        "SGP": "新加坡", "MYS": "马来西亚", "THA": "泰国", "VNM": "越南",
+        "PHL": "菲律宾", "IDN": "印度尼西亚", "MMR": "缅甸", "KHM": "柬埔寨",
+        "LAO": "老挝", "BRN": "文莱", "TLS": "东帝汶",
+        "IND": "印度", "PAK": "巴基斯坦", "BGD": "孟加拉", "NPL": "尼泊尔",
+        "LKA": "斯里兰卡", "MDV": "马尔代夫", "BTN": "不丹",
+        # 中亚、西亚、中东
+        "KAZ": "哈萨克斯坦", "UZB": "乌兹别克斯坦", "TKM": "土库曼斯坦",
+        "KGZ": "吉尔吉斯斯坦", "TJK": "塔吉克斯坦", "AZE": "阿塞拜疆",
+        "ARM": "亚美尼亚", "GEO": "格鲁吉亚",
+        "TUR": "土耳其", "IRN": "伊朗", "IRQ": "伊拉克", "SYR": "叙利亚",
+        "LBN": "黎巴嫩", "JOR": "约旦", "ISR": "以色列", "PSE": "巴勒斯坦",
+        "SAU": "沙特阿拉伯", "ARE": "阿联酋", "QAT": "卡塔尔", "KWT": "科威特",
+        "BHR": "巴林", "OMN": "阿曼", "YEM": "也门", "AFG": "阿富汗",
+        # 欧洲
+        "DEU": "德国", "FRA": "法国", "GBR": "英国", "IRL": "爱尔兰",
+        "ITA": "意大利", "ESP": "西班牙", "PRT": "葡萄牙", "GRC": "希腊",
+        "NLD": "荷兰", "BEL": "比利时", "LUX": "卢森堡", "CHE": "瑞士",
+        "AUT": "奥地利", "DNK": "丹麦", "NOR": "挪威", "SWE": "瑞典",
+        "FIN": "芬兰", "ISL": "冰岛",
+        "POL": "波兰", "CZE": "捷克", "SVK": "斯洛伐克", "HUN": "匈牙利",
+        "ROU": "罗马尼亚", "BGR": "保加利亚", "HRV": "克罗地亚", "SVN": "斯洛文尼亚",
+        "SRB": "塞尔维亚", "BIH": "波黑", "MNE": "黑山", "MKD": "北马其顿",
+        "ALB": "阿尔巴尼亚", "MLT": "马耳他", "CYP": "塞浦路斯",
+        "EST": "爱沙尼亚", "LVA": "拉脱维亚", "LTU": "立陶宛",
+        "BLR": "白俄罗斯", "UKR": "乌克兰", "MDA": "摩尔多瓦", "RUS": "俄罗斯",
+        # 北美、中美、加勒比
+        "USA": "美国", "CAN": "加拿大", "MEX": "墨西哥",
+        "GTM": "危地马拉", "BLZ": "伯利兹", "SLV": "萨尔瓦多",
+        "HND": "洪都拉斯", "NIC": "尼加拉瓜", "CRI": "哥斯达黎加", "PAN": "巴拿马",
+        "CUB": "古巴", "JAM": "牙买加", "HTI": "海地", "DOM": "多米尼加",
+        "BHS": "巴哈马", "BRB": "巴巴多斯", "TTO": "特立尼达和多巴哥",
+        "BMU": "百慕大", "CYM": "开曼群岛", "VGB": "英属维尔京群岛",
+        # 南美
+        "BRA": "巴西", "ARG": "阿根廷", "CHL": "智利", "PER": "秘鲁",
+        "COL": "哥伦比亚", "VEN": "委内瑞拉", "ECU": "厄瓜多尔",
+        "BOL": "玻利维亚", "PRY": "巴拉圭", "URY": "乌拉圭",
+        # 非洲
+        "ZAF": "南非", "EGY": "埃及", "NGA": "尼日利亚", "KEN": "肯尼亚",
+        "TZA": "坦桑尼亚", "ZWE": "津巴布韦", "ETH": "埃塞俄比亚",
+        "GHA": "加纳", "MAR": "摩洛哥", "TUN": "突尼斯", "DZA": "阿尔及利亚",
+        "LBY": "利比亚", "SDN": "苏丹", "UGA": "乌干达", "SEN": "塞内加尔",
+        "CIV": "科特迪瓦", "CMR": "喀麦隆", "COD": "刚果（金）", "COG": "刚果（布）",
+        "AGO": "安哥拉", "MOZ": "莫桑比克", "ZMB": "赞比亚", "NAM": "纳米比亚",
+        "BWA": "博茨瓦纳", "MWI": "马拉维", "MDG": "马达加斯加",
+        "MUS": "毛里求斯", "SYC": "塞舌尔", "RWA": "卢旺达", "BDI": "布隆迪",
+        # 大洋洲
+        "AUS": "澳大利亚", "NZL": "新西兰", "FJI": "斐济",
+        "PNG": "巴布亚新几内亚", "SLB": "所罗门群岛", "VUT": "瓦努阿图",
+        "WSM": "萨摩亚", "TON": "汤加", "PLW": "帕劳",
+        "MHL": "马绍尔群岛", "FSM": "密克罗尼西亚", "NRU": "瑙鲁",
+        "KIR": "基里巴斯", "TUV": "图瓦卢",
     }
 
     AIRCRAFT_TYPE_MAP = {
@@ -293,11 +342,6 @@ with tab1:
         return bool(re.match(r'^[0-9]{17}[0-9X]$', s))
 
     def resolve_crew_id_and_license(crew_name, fallback_passport=""):
-        """
-        兜底逻辑（主要针对 GD 单里出现、但不在名单里的新面孔）：
-        - 名单里匹配到 → 用名单
-        - 名单里没匹配到，但 GD 单给了 18 位身份证 → 执照号也填身份证号
-        """
         id_val = find_id(crew_name)
         license_val = find_license(crew_name)
         if id_val and license_val:
@@ -319,7 +363,6 @@ with tab1:
         if re.match(r'^[0-9]{15}$', pn) or re.match(r'^[0-9]{17}[0-9Xx]$', pn): return "身份证"
         return "护照"
 
-    # ---------- 单元格安全设置 ----------
     def safe_set_cell_value(ws, row, col, value):
         cell = ws.cell(row=row, column=col)
         if isinstance(cell, MergedCell):
@@ -345,7 +388,6 @@ with tab1:
                 return str(cell.value).strip()
         return ""
 
-    # ---------- 时间/日期工具 ----------
     def parse_utc_to_beijing(utc_str, date_str):
         try:
             time_part = utc_str.replace('Z', '').strip()
@@ -914,6 +956,28 @@ with tab1:
             show_cols = CREW_FILL_COLUMNS_EAST if is_east_china else CREW_FILL_COLUMNS_GENERAL
 
             data, crew_list, passenger_list = parse_general_declaration(data_file)
+
+            # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+            # 改动 2：统一收集"未知国籍"（机组 + 乘客），页面顶部弹警告
+            #  - 机组如果国籍未识别，编辑表格里仍显示"待核实(XXX)"（保留原有 has_unknown_nation 逻辑）
+            #  - 乘客如果国籍未识别，本警告能让用户第一时间看到，而不是等 Excel 生成后才发现
+            # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+            unknown_nation_codes = set()
+            for _c in crew_list:
+                _n = str(_c.get("nationality", "")).strip().upper()
+                if _n and _n not in NATION_MAP:
+                    unknown_nation_codes.add(_n)
+            for _p in passenger_list:
+                _n = str(_p.get("nationality", "")).strip().upper()
+                if _n and _n not in NATION_MAP:
+                    unknown_nation_codes.add(_n)
+
+            if unknown_nation_codes:
+                st.warning(
+                    "⚠️ **以下国籍三字码未在 NATION_MAP 中识别，将被原样写入 Excel**"
+                    "（如需要中文名，请补充到 NATION_MAP 或在表格里手动修改）：\n\n"
+                    f"**{', '.join(sorted(unknown_nation_codes))}**"
+                )
 
             st.subheader("📋 本次机组信息（可编辑）")
             st.caption("系统已从内置名单匹配出**将要写入的证件号码 / 执照号码 / 联系方式**，如有出入可直接在表格里修改（也可改姓名、性别、出生日期或调整职务）。改完下方下载按钮生成的就是最新数据。")
