@@ -49,9 +49,6 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 功能5：内地批复执行情况统计表",
 ])
 
-# ================================================================
-# 功能1：备案表生成（支持总调 / 华东中南模板）
-# ================================================================
 with tab1:
     from copy import copy as _copy_style
     from openpyxl.styles import Font
@@ -77,7 +74,7 @@ with tab1:
         ("赵岩松 / Yansong ZHAO", "186 1161 8385", "410103197004017014", "410103197004017014"),
         ("Bruce Roderick, WAINES", "186 6532 9796", "3448726", "P270802FF"),
         ("Oliver Viktor, RACZ", "186 1197 3165", "000336198206158001", "BV3139632"),
-        ("Yiftah RAUCH / Yiftah, RAUCH", "186 1045 0563", "000972198112152001", "000972198112152001"),
+        ("Yiftah RAUCH / Yiftah, RAUCH", "186 1045 0563", "000972198112152001", "24500061"),
         ("尤欣 / Xin YOU", "139 1608 5072", "620102197604293015", "620102197604293015"),
         ("李亚民 / Yamin Li", "133 6632 0878", "350104197107184915", "350104197107184915"),
         ("赵镭 / Lei ZHAO", "138 0883 9660", "440301198204157271", "440301198204157271"),
@@ -269,6 +266,65 @@ with tab1:
         "N7777U": "GLEX", "N777ZH": "GLF6", "N88AY": "GLF5", "T7178HT": "GL7T",
         "T7CJK": "GLEX", "VPCSZ": "GL7T", "VPCVA": "GLF6", "B652Q": "GLF4",
         "B652S": "GLF4", "B65AP": "GLF4",
+    }
+
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # 华东机场四字码 → 中文城市名（仅用于华东模板的下载文件名）
+    # 规则：
+    #   - 一般取 "城市/机场" 里的城市名（斜杠前）
+    #   - 上海三场特殊处理，取机场名（虹桥 / 龙华 / 浦东）
+    #   - 不在表内的机场原样输出四字码（如境外机场 VHHH 保持 VHHH）
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    EAST_CHINA_AIRPORT_MAP = {
+        # 上海三场：取斜杠后的机场名
+        "ZSSS": "虹桥",
+        "ZSSL": "龙华",
+        "ZSPD": "浦东",
+        # 其他华东机场：取城市名
+        "ZSAQ": "安庆",
+        "ZSBB": "蚌埠",
+        "ZSCG": "常州",
+        "ZGOW": "揭阳",
+        "ZSJH": "池州",
+        "ZSFZ": "福州",
+        "ZSGZ": "赣州",
+        "ZSRJ": "赣州",
+        "ZSHC": "杭州",
+        "ZSOF": "合肥",
+        "ZSSH": "淮安",
+        "ZSTX": "黄山",
+        "ZSGS": "井冈山",
+        "ZSJD": "景德镇",
+        "ZSJJ": "九江",
+        "ZSLO": "连城",
+        "ZSLG": "连云港",
+        "ZSLQ": "台州",
+        "ZGMX": "梅州",
+        "ZSCN": "南昌",
+        "ZSNJ": "南京",
+        "ZSNT": "南通",
+        "ZSNB": "宁波",
+        "ZSJU": "衢州",
+        "ZSQZ": "泉州",
+        "ZSAM": "厦门",
+        "ZSSZ": "苏州",
+        "ZSWZ": "温州",
+        "ZSWX": "无锡",
+        "ZSWU": "芜湖",
+        "ZSWY": "武夷山",
+        "ZSXZ": "徐州",
+        "ZSYN": "盐城",
+        "ZSYA": "扬州",
+        "ZSYC": "宜春",
+        "ZSBA": "蚌埠",     # 蚌埠/滕湖（新）
+        "ZSBO": "亳州",     # 亳州（新）
+        "ZSLI": "丽水",     # 丽水（新）
+        "ZSJX": "嘉兴",     # 嘉兴/南湖（新）
+        "ZSYW": "义乌",
+        "ZSZS": "舟山",
+        "ZSSR": "上饶",
+        "ZSSM": "三明",
+        "ZSWA": "芜湖",
     }
 
     def get_aircraft_type(reg, gd_type=""):
@@ -925,11 +981,50 @@ with tab1:
             return fill_template_general(template_bytes, data, crew_rows, passenger_list, route_display)
 
     # ================================================================
+    # XLSX → PDF（仅 Windows + 有 Excel + 有 pywin32 时可用）
+    # ================================================================
+    def _convert_xlsx_to_pdf(xlsx_bytes):
+        import tempfile
+        import os as _os
+        import pythoncom
+        import win32com.client as win32
+
+        pythoncom.CoInitialize()
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                xlsx_path = _os.path.join(tmpdir, "input.xlsx")
+                pdf_path = _os.path.join(tmpdir, "input.pdf")
+                with open(xlsx_path, "wb") as f:
+                    f.write(xlsx_bytes)
+
+                excel = win32.DispatchEx("Excel.Application")
+                excel.Visible = False
+                excel.DisplayAlerts = False
+                try:
+                    wb = excel.Workbooks.Open(xlsx_path)
+                    wb.ExportAsFixedFormat(0, pdf_path)
+                    wb.Close(SaveChanges=False)
+                finally:
+                    excel.Quit()
+
+                if not _os.path.exists(pdf_path):
+                    raise RuntimeError("Excel 转换后找不到 PDF 文件")
+
+                with open(pdf_path, "rb") as f:
+                    return f.read()
+        finally:
+            pythoncom.CoUninitialize()
+
+    @st.cache_data(show_spinner=False, max_entries=8)
+    def _cached_xlsx_to_pdf(xlsx_bytes):
+        return _convert_xlsx_to_pdf(xlsx_bytes)
+
+    # ================================================================
     # 页面逻辑
     # ================================================================
     data_file = st.file_uploader("上传 GD单（中文版Excel）（.xlsx）", type=["xlsx"], key="data")
-    template_file = st.file_uploader("上传模板（支持总调模板 或 华东、中南模板，系统将自动识别）", type=["xlsx"], key="template")
-    flight_plan_file = st.file_uploader("（可选）上传航段数据导出（北京时间），用于预填文件名", type=["xlsx"], key="flight_plan")
+    template_file = st.file_uploader("上传模板（支持总调模板 或 华东中南模板，系统将自动识别,华东中南模板需手动添加盖章，模板已存共享盘：\航班计划申请\公务飞行计划信息备案表\备案表模板）", type=["xlsx"], key="template")
+    flight_plan_file = st.file_uploader("（可选）上传航段数据导出（北京时间），用于预填文件名//涉及TCI088需手动调整表格内Callsign以及文件名（文件名写的是航班号，非注册号，不能有横杠-）", type=["xlsx"], key="flight_plan")
 
     if data_file and template_file:
         try:
@@ -1093,8 +1188,20 @@ with tab1:
             with_time = parse_with_time_route(raw_route, date_display)
             route_display = with_time if (with_time != raw_route and with_time is not None) else (raw_route if raw_route else default_route)
 
-            no_time = parse_no_time_route(raw_route, date_display)
-            file_name_base = no_time if no_time is not None else (f"{date_display} {reg} {from_code}-{to_code}" if reg and from_code and to_code else route_display)
+            # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+            # 文件名生成（华东 / 总调 分开）
+            #  - 华东模板：公务飞行计划信息备案表（日期 机号 机号 起点-终点）
+            #    起点/终点优先按 EAST_CHINA_AIRPORT_MAP 映射为中文城市名，
+            #    上海三场固定为 虹桥 / 龙华 / 浦东；表外的机场原样输出四字码
+            #  - 总调模板：沿用原来的命名逻辑（保持不变）
+            # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+            if is_east_china and date_display and reg and from_code and to_code:
+                from_cn = EAST_CHINA_AIRPORT_MAP.get(str(from_code).strip().upper(), from_code)
+                to_cn = EAST_CHINA_AIRPORT_MAP.get(str(to_code).strip().upper(), to_code)
+                file_name_base = f"公务飞行计划信息备案表（{date_display} {reg} {reg} {from_cn}-{to_cn}）"
+            else:
+                no_time = parse_no_time_route(raw_route, date_display)
+                file_name_base = no_time if no_time is not None else (f"{date_display} {reg} {from_code}-{to_code}" if reg and from_code and to_code else route_display)
 
             safe_file_name = re.sub(r'[\\/*?:"<>|]', "_", file_name_base).strip() or "备案表"
             download_file_name = f"{safe_file_name}.xlsx"
@@ -1110,6 +1217,22 @@ with tab1:
                 data=result_bytes, file_name=download_file_name,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
+
+            # ★ PDF 下载：仅 Windows + Excel + pywin32 环境生效，文件名与 xlsx 共用
+            if _SUPPORTS_PDF:
+                try:
+                    with st.spinner("正在生成 PDF..."):
+                        pdf_bytes = _cached_xlsx_to_pdf(result_bytes)
+                    pdf_file_name = download_file_name.replace(".xlsx", ".pdf")
+                    st.download_button(
+                        label="⬇️ 下载 PDF 版本",
+                        data=pdf_bytes,
+                        file_name=pdf_file_name,
+                        mime="application/pdf",
+                    )
+                except Exception as _pdf_err:
+                    st.warning(f"PDF 生成失败：{_pdf_err}")
+
             st.caption("⏳ 输入文件名之后稍等3秒钟后再点击下载")
 
         except Exception as e:
@@ -1117,6 +1240,14 @@ with tab1:
             st.stop()
     else:
         st.info("👆 请同时上传 GD单 和 模板文件。")
+
+
+
+
+
+
+
+
 # ================================================================
 # 功能2：世界时行程 + 飞越&香港邮件（签名内嵌到 textarea）
 # ================================================================
@@ -2548,6 +2679,35 @@ window.addEventListener('DOMContentLoaded',()=>{const s=loadInput();if(s)ie.valu
     components.html(G_HTML, height=900, scrolling=True)
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # ================================================================
 # 功能4：批复核对
 # ================================================================
@@ -2797,7 +2957,6 @@ W272,"Andrew Nigel, KING",Andrew.king@aero.bombardier.com
             parts.append(nation_label)
         return " ".join(parts)
 
-    # ★ 核心修改 1：重写正则，采用 middle 匹配，兼容所有机型 / 外机呼号格式
     PC_APPROVAL_RE = re.compile(
         r"^(?P<reg>[A-Z0-9\-]+)\s+"
         r"(?P<middle>.*?)\s+"
@@ -2810,7 +2969,7 @@ W272,"Andrew Nigel, KING",Andrew.king@aero.bombardier.com
 
     def pc_parse_approval_line(text):
         text = text.strip()
-        
+
         m = PC_APPROVAL_RE.match(text)
         if not m:
             return None
@@ -2824,17 +2983,14 @@ W272,"Andrew Nigel, KING",Andrew.king@aero.bombardier.com
         date_raw = m.group("date").upper()
         rest = m.group("rest").strip()
 
-        # 智能解析 middle (机号/呼号/机型)
         middle_parts = [p.strip() for p in middle.split() if p.strip()]
         ac_type = ""
         flight_no = ""
 
         if pc_is_b_reg(reg):
-            # 国内机，第二个词通常是机型
             if middle_parts:
                 ac_type = middle_parts[-1]
         else:
-            # 外机处理逻辑
             if len(middle_parts) == 1:
                 if middle_parts[0].upper() == reg:
                     flight_no = middle_parts[0]
@@ -3518,7 +3674,7 @@ W272,"Andrew Nigel, KING",Andrew.king@aero.bombardier.com
             p = on_end
             while p < len(full_text) and full_text[p] in ' \t\xa0':
                 p += 1
-            m_svc = re.match(r'(U/H|N/M)', full_text[p:], re.IGNORECASE)
+            m_svc = re.match(r'(U/H|N/M|FERRY|BUSINESS)', full_text[p:], re.IGNORECASE)
             if m_svc:
                 insert_pos = p + m_svc.end()
             else:
@@ -3871,7 +4027,6 @@ W272,"Andrew Nigel, KING",Andrew.king@aero.bombardier.com
             if approval.get("dup_prefix"):
                 dup_prefix_paras.append((p, approval["dup_prefix"]))
 
-            # ★ 核心修改 2：放宽外机跳过条件，只有未带机型才当成“未批已申请”跳过
             if not approval["is_domestic"] and approval["flight_no"] and not approval["type"]:
                 unapproved_keys.add(
                     (approval["reg"], approval["dep"], approval["arr"])
@@ -3911,17 +4066,23 @@ W272,"Andrew Nigel, KING",Andrew.king@aero.bombardier.com
                 _exp_nation = nation_for_expected if nation_for_expected else "机组未定"
                 expected_line = pc_build_expected_line(excel_row, _exp_nation)
 
-            if excel_row is not None and approval["is_domestic"]:
+            # ★★★ 本次修改 ①：去掉 is_domestic 限制，让外机也进入补 service 流程 ★★★
+            if excel_row is not None:
                 has_service = bool(approval["service"])
                 remark = approval["remark"] or ""
                 has_nation = ("中国籍" in remark) or ("外籍" in remark)
 
                 need_service = not has_service
-                need_nation = not has_nation
+                # ★★★ 本次修改 ②：国籍只给国内机补 ★★★
+                need_nation = (not has_nation) and approval["is_domestic"]
 
                 if need_service or need_nation:
                     _ferry = pc_is_ferry_use(excel_row["use"])
-                    _svc = "N/M" if _ferry else "U/H"
+                    # ★★★ 本次修改 ③：外机用 FERRY / BUSINESS，国内机保持 N/M / U/H ★★★
+                    if approval["is_domestic"]:
+                        _svc = "N/M" if _ferry else "U/H"
+                    else:
+                        _svc = "FERRY" if _ferry else "BUSINESS"
 
                     _nation = ""
                     if need_nation:
@@ -4041,18 +4202,9 @@ W272,"Andrew Nigel, KING",Andrew.king@aero.bombardier.com
                 red_parts.append(approval["service"])
                 highlight_parts.append(approval["service"])
 
-            if text_flight is not None:
-                text_ferry = text_flight.get("is_ferry", False)
-                if excel_ferry and not text_ferry:
-                    diffs.append("文本漏 F 标记")
-                    if approval["service"] and approval["service"] not in red_parts:
-                        red_parts.append(approval["service"])
-                        highlight_parts.append(approval["service"])
-                elif not excel_ferry and text_ferry:
-                    diffs.append("文本多标 F 标记")
-                    if approval["service"] and approval["service"] not in red_parts:
-                        red_parts.append(approval["service"])
-                        highlight_parts.append(approval["service"])
+            # ★★★ 本次修改 ④：删除"文本漏/多 F 标记"检查 ★★★
+            # 理由：service 正确性以 Excel「用途」字段为唯一依据；文本仅用于核对机组国籍。
+            # 原代码中检查 text_flight["is_ferry"] 与 excel_ferry 是否一致的一段已移除。
 
             if approval["is_domestic"]:
                 if text_flight:
@@ -4210,14 +4362,13 @@ W272,"Andrew Nigel, KING",Andrew.king@aero.bombardier.com
                 continue
 
             reg_written = pc_parse_pending_reg(raw_text)
-            
-            # ★ 核心修改 3：标记已用 Excel，防止末尾重复报缺失
+
             for r in excel_rows:
-                if (r["reg"] == reg_written and 
-                    r["dep"] == dep and 
-                    r["arr"] == arr and 
-                    r["dep_date"] and 
-                    r["dep_date"].month == month and 
+                if (r["reg"] == reg_written and
+                    r["dep"] == dep and
+                    r["arr"] == arr and
+                    r["dep_date"] and
+                    r["dep_date"].month == month and
                     r["dep_date"].day == day):
                     used_excel.add(r["_idx"])
                     break
@@ -4481,6 +4632,33 @@ W272,"Andrew Nigel, KING",Andrew.king@aero.bombardier.com
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             key="pc_download_btn",
         )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # ================================================================
 # 功能5：内地批复执行情况统计表
@@ -4951,34 +5129,31 @@ async function parseWordDocx(buf) {
     while ((tm = tRegex.exec(pXml)) !== null) text += tm[1];
     text = decodeXmlEntities(text).trim();
     
-    // ★ 只识别【青绿色】底色
-    let isColored = false;
+    // ★ 修改：只识别【加粗】作为标记
+    let isBold = false;
     
-    // 1. 检查高亮色（Word自带的“文本突出显示颜色”里的青绿色系）
-    const hlMatch = pXml.match(/<w:highlight\b[^>]*?w:val="([^"]+)"/);
-    if (hlMatch) {
-        const color = hlMatch[1].toLowerCase();
-        if (['green', 'cyan', 'darkgreen', 'darkcyan', 'brightgreen'].includes(color)) {
-            isColored = true;
+    // 遍历段落内的每一个文本块 <w:r>
+    const runRegex = /<w:r\b[^>]*>([\s\S]*?)<\/w:r>/g;
+    let rMatch;
+    while ((rMatch = runRegex.exec(pXml)) !== null) {
+        const runXml = rMatch[1];
+        let runText = '';
+        const rtRegex = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g;
+        let rtMatch;
+        while ((rtMatch = rtRegex.exec(runXml)) !== null) {
+            runText += rtMatch[1];
         }
-    }
-    
-    // 2. 检查底纹色（自定义填充的青绿色/浅绿色 Hex 色值）
-    if (!isColored) {
-        const shdRegex = /<w:shd\b[^>]*?w:fill="([^"]+)"/g;
-        let shdMatch;
-        // 兼容各种常用的青绿、深绿、浅绿、青蓝色值
-        const greenRegex = /^(00B050|00B0F0|92D050|00FF00|00FFFF|C6EFCE|A9D08E|33CCCC|66CCCC|00CCFF|CCFFFF|00FFCC|00CC99|99FF99|CCFFCC|00FF99|00CC66|33CC33|66FF66|00FA9A|90EE90|32CD32)$/i;
-        while ((shdMatch = shdRegex.exec(pXml)) !== null) {
-            const fill = shdMatch[1].toUpperCase();
-            if (greenRegex.test(fill)) {
-                isColored = true;
-                break;
-            }
+        runText = decodeXmlEntities(runText).trim();
+
+        // 如果这个文本块有实际文字，并且包含加粗标签 <w:b>
+        // （兼容 <w:b/>, <w:b w:val="true"/>, <w:b w:val="1"/>）
+        if (runText && /<w:b(?:\s+w:val="(?:true|1)")?\s*\/?>/i.test(runXml)) {
+            isBold = true;
+            break;
         }
     }
 
-    if (text) paragraphs.push({ text, isColored });
+    if (text) paragraphs.push({ text, isMarked: isBold });
   }
 
   // 必须严格包含：机号 机型 四字码起飞时间 到达时间四字码 ON 日期
@@ -4988,7 +5163,7 @@ async function parseWordDocx(buf) {
 
   for (const p of paragraphs) {
     const text = p.text;
-    const isColored = p.isColored;
+    const isMarked = p.isMarked;
 
     // 严格校验：只处理完全符合标准航班格式的段落
     const m = text.match(flightRe);
@@ -4998,8 +5173,8 @@ async function parseWordDocx(buf) {
     if (!month) continue;
     const reg = m[1].toUpperCase();
 
-    // 只有在完全符合航班格式的前提下，带有底色的才计入申请批复
-    if (isColored) {
+    // 只有完全符合航班格式，且带加粗标记的才计入申请批复
+    if (isMarked) {
         blueApplied[reg] = (blueApplied[reg] || 0) + 1;
     }
 
@@ -5243,7 +5418,7 @@ function render() {
       <div class="chip bad"><b>${totalLate}</b><span>非准点</span></div>
       <div class="chip info"><b>${totalSobt}</b><span>SOBT 已匹配</span></div>
       ${totalNoSobt ? `<div class="chip"><b>${totalNoSobt}</b><span>无 SOBT（按 ETD）</span></div>` : ''}
-      ${totalBlue ? `<div class="chip info"><b>${totalBlue}</b><span>带底色批复计划</span></div>` : ''}
+      ${totalBlue ? `<div class="chip info"><b>${totalBlue}</b><span>带加粗批复计划</span></div>` : ''}
     </div>`;
 
   if (!regs.length) {
@@ -5315,7 +5490,7 @@ function render() {
   // 第二页：申请情况预览
   let applyHtml = '';
   if (Object.keys(blueList).length > 0) {
-    applyHtml = `<div class="section-title">第二页：申请情况预览（带底色计划）</div>
+    applyHtml = `<div class="section-title">第二页：申请情况预览（加粗标记计划）</div>
       <table class="pt">
         <thead><tr><th>飞机</th><th>正常批复架次</th><th>总批复架次</th></tr></thead>
         <tbody>`;
@@ -5609,7 +5784,7 @@ async function applyToTemplate() {
           const titleChange2 = await patchTitleDate(zip, applySheetXml, applyAoa, '申请情况日度汇总', newDateText);
           if (titleChange2 && titleChange2.sheetXml) applySheetXml = titleChange2.sheetXml;
 
-          // 2. 清除并填入蓝底数据
+          // 2. 清除并填入数据
           const applyClearUpdates = {};
           const applyFillUpdates = {};
           const applyFinalValues = {};
@@ -5759,7 +5934,7 @@ async function handleFile(file, type) {
       state.wordRecords = records;
       state.blueApplied = blueApplied;
       state.wordName = file.name;
-      $('wordNameBox').textContent = file.name + `（${records.length} 条，带底色 ${Object.values(blueApplied).reduce((a,b)=>a+b,0)} 条）`;
+      $('wordNameBox').textContent = file.name + `（${records.length} 条，带加粗 ${Object.values(blueApplied).reduce((a,b)=>a+b,0)} 条）`;
       $('dropWord').classList.add('loaded');
     }
     showStatus('');
