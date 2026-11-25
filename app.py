@@ -49,11 +49,15 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 功能5：内地批复执行情况统计表",
 ])
 
+# ================================================================
+# 功能1：备案表生成（新增：机组人员库勾选 + 职务指定）
+# 用法：用本段完整替换原文件中 从 “with tab1:” 开始、
+#       到 “# 功能2：世界时行程” 之前 的全部代码（tab2~tab5 不动）
+# ================================================================
 with tab1:
     from copy import copy as _copy_style
     from openpyxl.styles import Font
     from openpyxl.cell.cell import MergedCell
-
 
     # ================================================================
     # 内置机组数据
@@ -195,11 +199,12 @@ with tab1:
     CREW_FILL_COLUMNS_GENERAL = ["职务", "姓名", "性别", "出生日期", "证件号码", "执照号码", "联系方式"]
     CREW_FILL_COLUMNS_EAST = ["职务", "姓名", "性别", "出生日期", "国籍", "证件号码", "执照号码"]
 
+    # ★ 机组表内部统一使用这 8 列（华东模板不显示联系方式、总调模板不显示国籍）
+    CREW_ALL_COLUMNS = ["职务", "姓名", "性别", "出生日期", "国籍", "证件号码", "执照号码", "联系方式"]
+    CREW_ROLE_ORDER = ["机长", "副驾驶", "乘务", "机务"]
+
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # 改动 1：NATION_MAP 大幅扩充
-    #  - 新增 MHL（马绍尔群岛）、NZL（新西兰）
-    #  - 补充公务机场景常见的其他国家/地区
-    #  未在字典内的三字码会被原样写入 Excel，并在页面顶部弹警告
+    # NATION_MAP
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     NATION_MAP = {
         # 中国及特别行政区
@@ -268,15 +273,9 @@ with tab1:
         "B652S": "GLF4", "B65AP": "GLF4",
     }
 
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # 华东机场四字码 → 中文城市名（仅用于华东模板的下载文件名）
-    # 规则：
-    #   - 一般取 "城市/机场" 里的城市名（斜杠前）
-    #   - 上海三场特殊处理，取机场名（虹桥 / 龙华 / 浦东）
-    #   - 不在表内的机场原样输出四字码（如境外机场 VHHH 保持 VHHH）
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★ 华东机场四字码 → 中文城市名（仅用于华东模板的下载文件名）
     EAST_CHINA_AIRPORT_MAP = {
-        # 上海三场：取斜杠后的机场名
+        # 上海三场：取机场名
         "ZSSS": "虹桥",
         "ZSSL": "龙华",
         "ZSPD": "浦东",
@@ -418,6 +417,119 @@ with tab1:
         pn = re.sub(r'\s+', '', pn)
         if re.match(r'^[0-9]{15}$', pn) or re.match(r'^[0-9]{17}[0-9Xx]$', pn): return "身份证"
         return "护照"
+
+    # ================================================================
+    # ★ 机组选择相关工具函数
+    # ================================================================
+    def _cell_text(value):
+        """把任意单元格值安全转成显示用字符串"""
+        if value is None:
+            return ""
+        try:
+            if pd.isna(value):
+                return ""
+        except Exception:
+            pass
+        if isinstance(value, str):
+            return value.strip()
+        try:
+            return str(value).strip()
+        except Exception:
+            return ""
+
+    def guess_crew_nation(crew, id_val=""):
+        """返回 (国籍显示文本, 是否未知)"""
+        raw_nat = _cell_text(crew.get("nationality", "")).upper()
+        if raw_nat and raw_nat in NATION_MAP:
+            return NATION_MAP[raw_nat], False
+        if raw_nat:
+            return f"待核实({raw_nat})", True
+        if is_18digit_id_card(id_val):
+            return "中国", False
+        return "待核实", True
+
+    def build_crew_default_rows(crew_list):
+        """按 GD单 生成默认机组行（含职务推断），返回 (rows, 溢出行, 是否有未知国籍)"""
+        role_rows = {r: None for r in CREW_ROLE_ORDER}
+        overflow_rows = []
+        has_unknown_nation = False
+
+        for idx, crew in enumerate(crew_list):
+            crew_name = _cell_text(crew.get("name", ""))
+            name_cn = extract_chinese_name(crew_name)
+            id_val, lic_val = resolve_crew_id_and_license(crew_name, crew.get("passport_no", ""))
+            contact = find_contact(crew_name)
+            nation, unknown = guess_crew_nation(crew, id_val)
+            has_unknown_nation = has_unknown_nation or unknown
+
+            if idx == 0:
+                preferred_role = "机长"
+            elif idx == 1:
+                preferred_role = "副驾驶"
+            else:
+                gender = _cell_text(crew.get("gender", ""))
+                preferred_role = "乘务" if gender in ["女", "Female", "F"] else "机务"
+
+            row = {
+                "职务": preferred_role,
+                "姓名": name_cn,
+                "性别": _cell_text(crew.get("gender", "")),
+                "出生日期": _cell_text(crew.get("dob", "")),
+                "国籍": nation,
+                "证件号码": _cell_text(id_val),
+                "执照号码": _cell_text(lic_val),
+                "联系方式": _cell_text(contact),
+            }
+            if role_rows.get(preferred_role) is None:
+                role_rows[preferred_role] = row
+            else:
+                overflow_rows.append(row)
+
+        rows = []
+        for role in CREW_ROLE_ORDER:
+            if role_rows[role] is not None:
+                rows.append(role_rows[role])
+            else:
+                rows.append({
+                    "职务": role, "姓名": "无", "性别": "", "出生日期": "",
+                    "国籍": "", "证件号码": "", "执照号码": "", "联系方式": "",
+                })
+        rows.extend(overflow_rows)
+        return rows, overflow_rows, has_unknown_nation
+
+    def build_crew_roster_df():
+        """全部内置机组 → 可勾选的人员库表"""
+        rows = []
+        for name, contact, license_no, doc_no in BUILTIN_CREW_DATA:
+            doc_str = _cell_text(doc_no)
+            rows.append({
+                "选择": False,
+                "职务": "",
+                "姓名": _cell_text(name),
+                "性别": "",
+                "出生日期": "",
+                "国籍": "中国" if is_18digit_id_card(doc_str) else "",
+                "证件号码": doc_str,
+                "执照号码": _cell_text(license_no),
+                "联系方式": _cell_text(contact),
+            })
+        return pd.DataFrame(rows, columns=[
+            "选择", "职务", "姓名", "性别", "出生日期", "国籍", "证件号码", "执照号码", "联系方式"
+        ])
+
+    def empty_crew_table():
+        return pd.DataFrame({c: pd.Series(dtype=str) for c in CREW_ALL_COLUMNS})
+
+    def normalize_crew_table(df):
+        """保证机组表一定有 8 列、全字符串、索引连续"""
+        if df is None or not isinstance(df, pd.DataFrame):
+            return empty_crew_table()
+        out = df.copy()
+        for c in CREW_ALL_COLUMNS:
+            if c not in out.columns:
+                out[c] = ""
+        out = out[CREW_ALL_COLUMNS].fillna("").astype(str).reset_index(drop=True)
+        return out
 
     def safe_set_cell_value(ws, row, col, value):
         cell = ws.cell(row=row, column=col)
@@ -1023,7 +1135,7 @@ with tab1:
     # 页面逻辑
     # ================================================================
     data_file = st.file_uploader("上传 GD单（中文版Excel）（.xlsx）", type=["xlsx"], key="data")
-    template_file = st.file_uploader("上传模板（支持总调模板 或 华东中南模板，系统将自动识别,华东中南模板需手动添加盖章，模板已存共享盘：\航班计划申请\公务飞行计划信息备案表\备案表模板）", type=["xlsx"], key="template")
+    template_file = st.file_uploader("上传模板（支持总调模板 或 华东中南模板，系统将自动识别,华东中南模板需手动添加盖章，模板已存共享盘：\\航班计划申请\\公务飞行计划信息备案表\\备案表模板）", type=["xlsx"], key="template")
     flight_plan_file = st.file_uploader("（可选）上传航段数据导出（北京时间），用于预填文件名//涉及TCI088需手动调整表格内Callsign以及文件名（文件名写的是航班号，非注册号，不能有横杠-）", type=["xlsx"], key="flight_plan")
 
     if data_file and template_file:
@@ -1052,11 +1164,7 @@ with tab1:
 
             data, crew_list, passenger_list = parse_general_declaration(data_file)
 
-            # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-            # 改动 2：统一收集"未知国籍"（机组 + 乘客），页面顶部弹警告
-            #  - 机组如果国籍未识别，编辑表格里仍显示"待核实(XXX)"（保留原有 has_unknown_nation 逻辑）
-            #  - 乘客如果国籍未识别，本警告能让用户第一时间看到，而不是等 Excel 生成后才发现
-            # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+            # ---------------- 未知国籍三字码提醒（机组 + 乘客） ----------------
             unknown_nation_codes = set()
             for _c in crew_list:
                 _n = str(_c.get("nationality", "")).strip().upper()
@@ -1074,80 +1182,290 @@ with tab1:
                     f"**{', '.join(sorted(unknown_nation_codes))}**"
                 )
 
-            st.subheader("📋 本次机组信息（可编辑）")
-            st.caption("系统已从内置名单匹配出**将要写入的证件号码 / 执照号码 / 联系方式**，如有出入可直接在表格里修改（也可改姓名、性别、出生日期或调整职务）。改完下方下载按钮生成的就是最新数据。")
-
-            role_order = ["机长", "副驾驶", "乘务", "机务"]
-            role_rows = {r: None for r in role_order}
-            overflow_rows = []
-            has_unknown_nation = False
-
-            for idx, crew in enumerate(crew_list):
-                name_cn = extract_chinese_name(crew["name"])
-                id_val, lic_val = resolve_crew_id_and_license(crew["name"], crew.get("passport_no", ""))
-                contact = find_contact(crew["name"])
-
-                raw_nat = str(crew.get("nationality", "")).strip().upper()
-                if raw_nat and raw_nat in NATION_MAP:
-                    nation = NATION_MAP[raw_nat]
-                elif raw_nat:
-                    nation = f"待核实({raw_nat})"
-                    has_unknown_nation = True
-                else:
-                    if is_18digit_id_card(id_val):
-                        nation = "中国"
-                    else:
-                        nation = "待核实"
-                        has_unknown_nation = True
-
-                if idx == 0: preferred_role = "机长"
-                elif idx == 1: preferred_role = "副驾驶"
-                else:
-                    gender = str(crew.get("gender", "")).strip()
-                    preferred_role = "乘务" if gender in ["女", "Female", "F"] else "机务"
-
-                row = {
-                    "职务": preferred_role, "姓名": name_cn,
-                    "性别": crew.get("gender", ""), "出生日期": crew.get("dob", ""),
-                    "证件号码": id_val, "执照号码": lic_val,
-                    "联系方式": contact, "国籍": nation,
-                }
-                if role_rows.get(preferred_role) is None: role_rows[preferred_role] = row
-                else: overflow_rows.append(row)
-
-            initial_rows = []
-            for role in role_order:
-                if role_rows[role] is not None: initial_rows.append(role_rows[role])
-                else:
-                    initial_rows.append({"职务": role, "姓名": "无", "性别": "", "出生日期": "", "证件号码": "", "执照号码": "", "联系方式": "", "国籍": ""})
-            initial_rows.extend(overflow_rows)
+            # ============================================================
+            # ★ 机组信息：默认 GD单 → 可编辑 → 可从人员库勾选替换/补充
+            # ============================================================
+            default_rows, overflow_rows, has_unknown_nation = build_crew_default_rows(crew_list)
 
             if overflow_rows:
                 overflow_desc = "、".join(f"{r['姓名']}（当前标为「{r['职务']}」）" for r in overflow_rows)
-                st.warning(f"⚠️ **本次机组共 {len(crew_list)} 人**，而模板机组区通常只有 4 行。以下人员**不会自动写入模板**：\n\n**{overflow_desc}**")
+                st.warning(
+                    f"⚠️ **本次机组共 {len(crew_list)} 人**，而模板机组区通常只有 4 行。"
+                    f"以下人员**不会自动写入模板**：\n\n**{overflow_desc}**\n\n"
+                    "可在下面「机组人员库」重新挑选人员并指定职务。"
+                )
 
             if has_unknown_nation and is_east_china:
                 st.error("⚠️ **警告：部分机组人员的国籍未能自动识别，请在下方表格中手动修改！**")
 
-            crew_signature = "|".join([c.get("name", "") for c in crew_list])
-            editor_key = f"crew_fill_editor_{abs(hash(crew_signature)) % (10**8)}"
-            df_fill = pd.DataFrame(initial_rows, columns=show_cols)
+            crew_signature = "||".join(
+                "|".join([
+                    _cell_text(c.get("name")),
+                    _cell_text(c.get("gender")),
+                    _cell_text(c.get("dob")),
+                    _cell_text(c.get("nationality")),
+                    _cell_text(c.get("passport_no")),
+                ])
+                for c in crew_list
+            )
+            crew_gd_id = abs(hash(crew_signature)) % (10 ** 8)
 
-            col_config = {
-                "职务": st.column_config.SelectboxColumn("职务", options=["机长", "副驾驶", "乘务", "机务"], width="small"),
+            if "crew_ver" not in st.session_state:
+                st.session_state["crew_ver"] = 0
+            if "crew_roster_ver" not in st.session_state:
+                st.session_state["crew_roster_ver"] = 0
+
+            # ★ 换了 GD单 → 机组表自动回到 GD单 默认（同一份 GD单 重跑不会冲掉手工修改）
+            if st.session_state.get("crew_gd_id") != crew_gd_id:
+                st.session_state["crew_gd_id"] = crew_gd_id
+                st.session_state["crew_table"] = normalize_crew_table(
+                    pd.DataFrame(default_rows, columns=CREW_ALL_COLUMNS)
+                )
+                st.session_state["crew_ver"] += 1
+                # 换 GD单 时顺便清掉人员库里残留的勾选
+                if isinstance(st.session_state.get("crew_roster"), pd.DataFrame):
+                    roster_reset = st.session_state["crew_roster"].copy()
+                    roster_reset["选择"] = False
+                    st.session_state["crew_roster"] = roster_reset
+                    st.session_state["crew_roster_ver"] += 1
+
+            st.session_state["crew_table"] = normalize_crew_table(st.session_state.get("crew_table"))
+
+            flash_msg = st.session_state.pop("crew_flash", "")
+            if flash_msg:
+                st.success(flash_msg)
+
+            st.subheader("📋 本次机组信息（可编辑）")
+            st.caption(
+                "默认按 **GD单** 的机组生成，可直接改职务 / 姓名 / 性别 / 出生日期 / 证件号码 / 执照 / 联系方式"
+                "（表格底部可 ➕ 加行、选中行可删除）。"
+                "需要换人时，展开下面的 **🧑‍✈️ 机组人员库** 勾选即可。"
+                "⚠️ 模板每个职务只写入**第一位**，重复职务的后面几位不会写入。"
+            )
+
+            crew_col_config = {
+                "职务": st.column_config.SelectboxColumn("职务", options=CREW_ROLE_ORDER, width="small"),
                 "姓名": st.column_config.TextColumn("姓名", width="medium"),
                 "性别": st.column_config.TextColumn("性别", width="small"),
                 "出生日期": st.column_config.TextColumn("出生日期", width="medium"),
+                "国籍": st.column_config.TextColumn("国籍", width="small"),
                 "证件号码": st.column_config.TextColumn("证件号码", width="medium"),
                 "执照号码": st.column_config.TextColumn("执照号码", width="medium"),
+                "联系方式": st.column_config.TextColumn("联系方式", width="medium"),
             }
-            if is_east_china:
-                col_config["国籍"] = st.column_config.TextColumn("国籍", width="small")
-            else:
-                col_config["联系方式"] = st.column_config.TextColumn("联系方式", width="medium")
 
-            edited_crew_df = st.data_editor(df_fill, num_rows="dynamic", width="stretch", height=280, key=editor_key, column_config=col_config)
-            crew_for_template = edited_crew_df.fillna("").astype(str).to_dict("records") if not edited_crew_df.empty else []
+            edited_crew_df = st.data_editor(
+                st.session_state["crew_table"],
+                num_rows="dynamic",
+                width="stretch",
+                height=300,
+                key=f"crew_fill_editor_{crew_gd_id}_{st.session_state['crew_ver']}_{int(is_east_china)}",
+                column_order=show_cols,
+                column_config=crew_col_config,
+            )
+
+            edf = normalize_crew_table(edited_crew_df)
+            st.session_state["crew_table"] = edf
+
+            # ---- 写入模板的预览 ----
+            role_first = {}
+            dup_names = []
+            for rec in edf.to_dict("records"):
+                role = str(rec.get("职务", "")).strip()
+                name = str(rec.get("姓名", "")).strip()
+                if role in CREW_ROLE_ORDER and name not in ("", "无"):
+                    if role in role_first:
+                        dup_names.append(f"{name}（{role}）")
+                    else:
+                        role_first[role] = name
+            preview_txt = "　｜　".join(f"{r}：{role_first.get(r, '无')}" for r in CREW_ROLE_ORDER)
+            st.caption(f"✍️ 将写入模板：{preview_txt}")
+            if dup_names:
+                st.warning("⚠️ 同一职务只写入第一位，以下人员本次不会写入模板：" + "、".join(dup_names))
+
+            # ---- 机组表操作按钮 ----
+            btn_a, btn_b, btn_c = st.columns(3)
+            with btn_a:
+                if st.button("➕ 添加一个空行", key="crew_add_blank_row"):
+                    blank = {c: "" for c in CREW_ALL_COLUMNS}
+                    blank["职务"] = "机务"
+                    st.session_state["crew_table"] = normalize_crew_table(
+                        pd.concat([edf, pd.DataFrame([blank])], ignore_index=True)
+                    )
+                    st.session_state["crew_ver"] += 1
+                    st.session_state["crew_flash"] = "已添加一个空行，请填写姓名等信息。"
+                    st.rerun()
+            with btn_b:
+                if st.button("↩️ 恢复为 GD单 默认机组", key="crew_reset_table"):
+                    st.session_state["crew_table"] = normalize_crew_table(
+                        pd.DataFrame(default_rows, columns=CREW_ALL_COLUMNS)
+                    )
+                    st.session_state["crew_ver"] += 1
+                    st.session_state["crew_flash"] = "已恢复为 GD单 默认机组。"
+                    st.rerun()
+            with btn_c:
+                if st.button("🗑️ 清空机组表", key="crew_clear_table"):
+                    st.session_state["crew_table"] = empty_crew_table()
+                    st.session_state["crew_ver"] += 1
+                    st.session_state["crew_flash"] = "机组表已清空，请从机组人员库勾选加入。"
+                    st.rerun()
+
+            # ============================================================
+            # ★ 机组人员库（勾选 → 指定职务 → 加入机组表）
+            # ============================================================
+            if (not isinstance(st.session_state.get("crew_roster"), pd.DataFrame)) or \
+                    list(st.session_state["crew_roster"].columns) != list(build_crew_roster_df().columns):
+                st.session_state["crew_roster"] = build_crew_roster_df()
+
+            with st.expander("🧑‍✈️ 机组人员库（勾选 → 加入本次机组，可指定机长/副驾驶/乘务/机务）", expanded=False):
+                st.caption(
+                    "① 搜索并勾选「选择」列 → ② 需要的话在「职务」列选好身份（不选就按右边的“默认职务”加入）"
+                    "→ ③ 点最下方按钮：**加入**＝追加到现有名单（同名只更新职务/补空字段，不会重复添加）；"
+                    "**替换**＝只用勾选的人重建整张机组表。"
+                    "\n\n💡 港/澳/台及外籍人员的「国籍」默认留空（只有 18 位大陆身份证才会自动填“中国”），"
+                    "用**华东模板**时请先在这里补好国籍。"
+                )
+
+                s1, s2, s3 = st.columns([2.2, 1, 1])
+                with s1:
+                    roster_kw = st.text_input(
+                        "搜索机组",
+                        value="",
+                        key="crew_roster_search",
+                        placeholder="🔍 输入姓名 / 证件号 / 电话的关键字过滤",
+                        label_visibility="collapsed",
+                    )
+                with s2:
+                    roster_default_role = st.selectbox(
+                        "默认职务",
+                        CREW_ROLE_ORDER,
+                        index=CREW_ROLE_ORDER.index("机务"),
+                        key="crew_roster_default_role",
+                        help="勾选的人如果在「职务」列没选，就按这里加入",
+                    )
+                with s3:
+                    roster_only_sel = st.checkbox("只看已勾选", value=False, key="crew_roster_only_sel")
+
+                roster_df = st.session_state["crew_roster"]
+                view = roster_df
+                kw = str(roster_kw or "").strip()
+                if kw:
+                    mask = pd.Series(False, index=roster_df.index)
+                    for col in ["姓名", "证件号码", "执照号码", "联系方式"]:
+                        mask = mask | roster_df[col].astype(str).str.contains(
+                            kw, case=False, na=False, regex=False
+                        )
+                    view = roster_df[mask]
+                if roster_only_sel:
+                    view = view[view["选择"] == True]
+                view = view.reset_index(drop=True)
+
+                if view.empty:
+                    if roster_only_sel and int(roster_df["选择"].sum()) == 0:
+                        st.info("还没有勾选任何人，请先在上面的列表里勾选。")
+                    else:
+                        st.info("没有匹配的人员，换个关键字试试。")
+                else:
+                    view_key = abs(hash(tuple(view["姓名"].astype(str)))) % (10 ** 8)
+                    edited_view = st.data_editor(
+                        view,
+                        num_rows="fixed",
+                        width="stretch",
+                        height=380,
+                        key=(
+                            f"crew_roster_editor_{st.session_state['crew_roster_ver']}"
+                            f"_{abs(hash(kw)) % (10 ** 8)}_{view_key}"
+                        ),
+                        column_config={
+                            "选择": st.column_config.CheckboxColumn("选择", width="small"),
+                            "职务": st.column_config.SelectboxColumn("职务", options=CREW_ROLE_ORDER, width="small"),
+                            "姓名": st.column_config.TextColumn("姓名", width="medium"),
+                            "性别": st.column_config.TextColumn("性别", width="small"),
+                            "出生日期": st.column_config.TextColumn("出生日期", width="medium"),
+                            "国籍": st.column_config.TextColumn(
+                                "国籍",
+                                width="small",
+                                help="加入机组表时会带上这里的国籍；港/澳/台及外籍默认留空，请按需填写",
+                            ),
+                            "证件号码": st.column_config.TextColumn("证件号码", width="medium"),
+                            "执照号码": st.column_config.TextColumn("执照号码", width="medium"),
+                            "联系方式": st.column_config.TextColumn("联系方式", width="medium"),
+                        },
+                        disabled=["姓名"],
+                    )
+
+                    # ---- 把当前视图里的修改/勾选合并回全量人员库 ----
+                    merged_view = edited_view.fillna("")
+                    roster_store = st.session_state["crew_roster"]
+                    for _, rw in merged_view.iterrows():
+                        row_name = str(rw["姓名"])
+                        m = roster_store["姓名"].astype(str) == row_name
+                        if not m.any():
+                            continue
+                        for col in ["选择", "职务", "性别", "出生日期", "国籍", "证件号码", "执照号码", "联系方式"]:
+                            roster_store.loc[m, col] = rw[col]
+                    roster_store["选择"] = roster_store["选择"].apply(
+                        lambda v: str(v).strip().lower() in ("true", "1", "1.0")
+                    )
+                    st.session_state["crew_roster"] = roster_store
+
+                picked_count = int(st.session_state["crew_roster"]["选择"].sum())
+                st.caption(f"当前已勾选 **{picked_count}** 人")
+
+                act1, act2 = st.columns(2)
+                with act1:
+                    add_clicked = st.button("➕ 将勾选人员加入本次机组", type="primary", key="crew_add_selected")
+                with act2:
+                    replace_clicked = st.button("🔁 用勾选人员替换整张机组表", key="crew_replace_selected")
+
+                if add_clicked or replace_clicked:
+                    roster_now = st.session_state["crew_roster"]
+                    picked = roster_now[roster_now["选择"] == True]
+                    if picked.empty:
+                        st.warning("还没有勾选任何人：请先在上面的「选择」列打勾。")
+                    else:
+                        table = edf.copy() if add_clicked else empty_crew_table()
+                        added = 0
+                        updated = 0
+                        for _, rw in picked.iterrows():
+                            name = extract_chinese_name(str(rw["姓名"]).strip())
+                            role = str(rw["职务"]).strip()
+                            if role not in CREW_ROLE_ORDER:
+                                role = roster_default_role
+                            info = {}
+                            for col in ["性别", "出生日期", "国籍", "证件号码", "执照号码", "联系方式"]:
+                                val = str(rw[col]).strip()
+                                info[col] = "" if val.lower() in ("nan", "none") else val
+                            match = table["姓名"].astype(str).str.strip() == name
+                            if match.any():
+                                idx0 = table.index[match][0]
+                                table.loc[idx0, "职务"] = role
+                                for col, val in info.items():
+                                    if val and not str(table.loc[idx0, col]).strip():
+                                        table.loc[idx0, col] = val
+                                updated += 1
+                            else:
+                                new_row = {"职务": role, "姓名": name}
+                                new_row.update(info)
+                                table = pd.concat([table, pd.DataFrame([new_row])], ignore_index=True)
+                                added += 1
+                        st.session_state["crew_table"] = normalize_crew_table(table)
+                        st.session_state["crew_ver"] += 1
+
+                        roster_clear = st.session_state["crew_roster"].copy()
+                        roster_clear["选择"] = False
+                        st.session_state["crew_roster"] = roster_clear
+                        st.session_state["crew_roster_ver"] += 1
+
+                        if replace_clicked:
+                            st.session_state["crew_flash"] = (
+                                f"✅ 已用勾选人员替换机组表（共 {len(picked)} 人，同名已合并）。"
+                            )
+                        else:
+                            st.session_state["crew_flash"] = (
+                                f"✅ 已更新本次机组：新增 {added} 人，更新 {updated} 人。"
+                            )
+                        st.rerun()
 
             st.markdown("---")
 
@@ -1188,13 +1506,7 @@ with tab1:
             with_time = parse_with_time_route(raw_route, date_display)
             route_display = with_time if (with_time != raw_route and with_time is not None) else (raw_route if raw_route else default_route)
 
-            # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
             # 文件名生成（华东 / 总调 分开）
-            #  - 华东模板：公务飞行计划信息备案表（日期 机号 机号 起点-终点）
-            #    起点/终点优先按 EAST_CHINA_AIRPORT_MAP 映射为中文城市名，
-            #    上海三场固定为 虹桥 / 龙华 / 浦东；表外的机场原样输出四字码
-            #  - 总调模板：沿用原来的命名逻辑（保持不变）
-            # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
             if is_east_china and date_display and reg and from_code and to_code:
                 from_cn = EAST_CHINA_AIRPORT_MAP.get(str(from_code).strip().upper(), from_code)
                 to_cn = EAST_CHINA_AIRPORT_MAP.get(str(to_code).strip().upper(), to_code)
@@ -1205,6 +1517,8 @@ with tab1:
 
             safe_file_name = re.sub(r'[\\/*?:"<>|]', "_", file_name_base).strip() or "备案表"
             download_file_name = f"{safe_file_name}.xlsx"
+
+            crew_for_template = normalize_crew_table(st.session_state["crew_table"]).to_dict("records")
 
             try:
                 result_bytes = fill_template(template_file, data, crew_for_template, passenger_list, route_display, is_east_china).getvalue()
@@ -1236,10 +1550,98 @@ with tab1:
             st.caption("⏳ 输入文件名之后稍等3秒钟后再点击下载")
 
         except Exception as e:
+            # st.rerun() / st.stop() 属于 Streamlit 的“控制流异常”。
+            # 新版 Streamlit 已让它们继承 BaseException，正常不会被这里捕获；
+            # 老版本若继承 Exception，这里必须原样抛出，否则按钮会报“处理失败”。
+            if type(e).__name__ in ("RerunException", "StopException", "ScriptControlException"):
+                raise
             st.error(f"❌ 处理失败：{e}")
             st.stop()
     else:
         st.info("👆 请同时上传 GD单 和 模板文件。")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
