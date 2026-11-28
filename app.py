@@ -320,6 +320,10 @@ with tab1:
     for _r in CREW_ROSTER:
         ROSTER_BY_CN[_r[1].strip()] = _r[2]
         ROSTER_BY_CN[_r[1].replace(" ", "").strip()] = _r[2]
+    ROSTER_CODE_BY_CN = {}
+    for _r in CREW_ROSTER:
+        ROSTER_CODE_BY_CN[_r[1].strip()] = _r[0]
+        ROSTER_CODE_BY_CN[_r[1].replace(" ", "").strip()] = _r[0]
 
     CREW_EXTRA = {
         "W273": {"id": "230102196606166119", "lic": "230102196606166119", "contact": "TBA"},
@@ -1329,6 +1333,11 @@ with tab1:
                 name_cn = extract_chinese_name(crew["name"])
                 id_val, lic_val = resolve_crew_id_and_license(crew["name"], crew.get("passport_no", ""))
                 contact = find_contact(crew["name"])
+                _code = ROSTER_CODE_BY_CN.get(name_cn) or ROSTER_CODE_BY_CN.get(str(crew.get("name", "")).replace(" ", "").strip())
+                _ex = CREW_EXTRA.get(_code, {}) if _code else {}
+                id_val = _ex.get("id", id_val)
+                lic_val = _ex.get("lic", lic_val)
+                contact = _ex.get("contact", contact)
 
                 raw_nat = str(crew.get("nationality", "")).strip().upper()
                 if raw_nat and raw_nat in NATION_MAP:
