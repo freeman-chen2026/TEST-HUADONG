@@ -1051,6 +1051,30 @@ with tab1:
             show_cols = CREW_FILL_COLUMNS_EAST if is_east_china else CREW_FILL_COLUMNS_GENERAL
 
             data, crew_list, passenger_list = parse_general_declaration(data_file)
+            # ===== 手动指定机组（极少数情况使用） =====
+            manual_crew_mode = st.toggle(
+                "✍️ 手动指定机组（覆盖 GD 单里的机组名单）",
+                value=False,
+                help="勾选后从内置名册里选择机组，GD 单的机组将被忽略；也可以在下方表格里直接增删改。",
+            )
+            if manual_crew_mode:
+                _roster_names = [r[0] for r in BUILTIN_CREW_DATA]
+                _picked = st.multiselect(
+                    "从名册选择机组（按选择顺序写入模板）",
+                    options=_roster_names,
+                    default=[],
+                    key="manual_crew_pick",
+                    help="先选的第 1 人默认机长、第 2 人副驾驶，其余按职务列手动调整。",
+                )
+                if _picked:
+                    crew_list = [
+                        {"name": n, "dob": "", "gender": "", "nationality": "",
+                         "doc_type": "", "passport_no": ""}
+                        for n in _picked
+                    ]
+                else:
+                    crew_list = []
+                    st.info("尚未选择机组：可直接在下方表格里手动添加姓名、证件号等信息。")
 
             # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
             # 改动 2：统一收集"未知国籍"（机组 + 乘客），页面顶部弹警告
