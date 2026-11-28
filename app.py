@@ -979,6 +979,42 @@ with tab1:
                 except Exception: pass
         return data_start_row
 
+
+    def _insert_crew_rows(ws, at_row, count, style_row):
+        from openpyxl.utils import get_column_letter
+        max_col = ws.max_column or 10
+        saved_heights = {}
+        for r in range(at_row, ws.max_row + 1):
+            h = ws.row_dimensions[r].height
+            if h is not None:
+                saved_heights[r] = h
+        affected = []
+        for mr in list(ws.merged_cells.ranges):
+            if mr.min_row >= at_row:
+                affected.append((mr.min_row, mr.min_col, mr.max_row, mr.max_col))
+                try: ws.unmerge_cells(str(mr))
+                except Exception: pass
+        ws.insert_rows(at_row, count)
+        _shift_images_down(ws, at_row, count)
+        for min_r, min_c, max_r, max_c in affected:
+            rng = (f"{get_column_letter(min_c)}{min_r + count}:{get_column_letter(max_c)}{max_r + count}")
+            try: ws.merge_cells(rng)
+            except Exception: pass
+        for r in list(ws.row_dimensions.keys()):
+            if r >= at_row:
+                try: del ws.row_dimensions[r]
+                except Exception: pass
+        for old_r, h in saved_heights.items():
+            ws.row_dimensions[old_r + count].height = h
+        styles = {c: _style_snapshot(ws.cell(style_row, c)) for c in range(1, max_col + 1)}
+        h0 = ws.row_dimensions[style_row].height
+        for i in range(count):
+            nr = at_row + i
+            for c, snap in styles.items():
+                _style_apply(ws.cell(nr, c), snap)
+            if h0:
+                ws.row_dimensions[nr].height = h0
+
     # ================================================================
     # 华东模板
     # ================================================================
@@ -1002,8 +1038,18 @@ with tab1:
             if role and role not in role_map: role_map[role] = cr
 
         roles_pos = {"机长": 15, "副驾驶": 16, "乘务": 17, "机务": 18}
-        for role_name, row_num in roles_pos.items():
-            cr = role_map.get(role_name)
+        _real_crew = [c for c in crew_rows if str(c.get("姓名", "")).strip() not in ("", "无")]
+        _extra = max(0, len(_real_crew) - 4)
+        if _extra:
+            _insert_crew_rows(ws, 19, _extra, 18)
+        _order = ["机长", "副驾驶", "乘务", "机务"]
+        _by = {r: [] for r in _order}
+        for cr in crew_rows:
+            role = str(cr.get("职务", "")).strip()
+            if role in _by:
+                _by[role].append(cr)
+
+        def _write_crew_row_east(row_num, cr):
             if cr and str(cr.get("姓名", "")).strip() not in ("", "无"):
                 name_val = str(cr.get("姓名", "")).strip()
                 safe_set_cell_value(ws, row_num, 2, name_val)
@@ -1020,8 +1066,18 @@ with tab1:
                 for c in range(2, 8):
                     safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
 
+        for _role in _order:
+            _write_crew_row_east(roles_pos[_role], _by[_role][0] if _by[_role] else None)
+
+        _extras = [cr for _role in _order for cr in _by[_role][1:]]
+        for _k, _cr in enumerate(_extras):
+            if _k >= _extra:
+                break
+            _row = 19 + _k
+            _write_crew_row_east(_row, _cr)
+
         if passenger_list:
-            start_row = 23
+            start_row = 23 + _extra
             passenger_start_row = _ensure_passenger_rows(ws, start_row, len(passenger_list))
             for i, pax in enumerate(passenger_list):
                 row_num = passenger_start_row + i
@@ -1086,8 +1142,18 @@ with tab1:
             if role and role not in role_map: role_map[role] = cr
 
         roles_pos = {"机长": 13, "副驾驶": 14, "乘务": 15, "机务": 16}
-        for role_name, row_num in roles_pos.items():
-            cr = role_map.get(role_name)
+        _real_crew = [c for c in crew_rows if str(c.get("姓名", "")).strip() not in ("", "无")]
+        _extra = max(0, len(_real_crew) - 4)
+        if _extra:
+            _insert_crew_rows(ws, 17, _extra, 16)
+        _order = ["机长", "副驾驶", "乘务", "机务"]
+        _by = {r: [] for r in _order}
+        for cr in crew_rows:
+            role = str(cr.get("职务", "")).strip()
+            if role in _by:
+                _by[role].append(cr)
+
+        def _write_crew_row(row_num, cr):
             if cr and str(cr.get("姓名", "")).strip() not in ("", "无"):
                 name_text = cr.get("姓名", "")
                 safe_set_cell_value(ws, row_num, 2, name_text)
@@ -1098,10 +1164,21 @@ with tab1:
                 safe_set_cell_value(ws, row_num, 7, cr.get("联系方式", ""))
                 _style_name_cell(ws, row_num, 2, name_text)
             else:
-                for c in range(2, 8): safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
+                for c in range(2, 8):
+                    safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
+
+        for _role in _order:
+            _write_crew_row(roles_pos[_role], _by[_role][0] if _by[_role] else None)
+
+        _extras = [cr for _role in _order for cr in _by[_role][1:]]
+        for _k, _cr in enumerate(_extras):
+            if _k >= _extra:
+                break
+            _row = 17 + _k
+            _write_crew_row(_row, _cr)
 
         if passenger_list:
-            start_row = 19
+            start_row = 19 + _extra
             passenger_start_row = _ensure_passenger_rows(ws, start_row, len(passenger_list))
             for i, pax in enumerate(passenger_list):
                 row_num = passenger_start_row + i
