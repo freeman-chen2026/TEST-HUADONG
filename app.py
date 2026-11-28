@@ -316,6 +316,11 @@ with tab1:
     M047|翟征宇|机务|男|1986-12-05|中国"""
     CREW_ROSTER = [tuple(part.strip() for part in x.split("|")) for x in CREW_ROSTER_CSV.strip().splitlines()]
     ROSTER_BY_ID = {r[0]: r for r in CREW_ROSTER}
+    ROSTER_BY_CN = {}
+    for _r in CREW_ROSTER:
+        ROSTER_BY_CN[_r[1].strip()] = _r[2]
+        ROSTER_BY_CN[_r[1].replace(" ", "").strip()] = _r[2]
+
     CREW_EXTRA = {
         "W273": {"id": "230102196606166119", "lic": "230102196606166119", "contact": "TBA"},
         "W274": {"id": "G137689"},
@@ -1365,10 +1370,17 @@ with tab1:
                         nation = "待核实"
                         has_unknown_nation = True
 
+                _hint = ROSTER_BY_CN.get(name_cn) or ROSTER_BY_CN.get(str(crew.get("name", "")).replace(" ", "").strip())
                 if manual_crew_mode and manual_rows:
                     preferred_role = "副驾驶"
-                elif idx == 0: preferred_role = "机长"
-                elif idx == 1: preferred_role = "副驾驶"
+                elif _hint == "飞行员":
+                    preferred_role = "机长" if role_rows.get("机长") is None else "副驾驶"
+                elif _hint in ("乘务", "机务"):
+                    preferred_role = _hint
+                elif idx == 0:
+                    preferred_role = "机长"
+                elif idx == 1:
+                    preferred_role = "副驾驶"
                 else:
                     gender = str(crew.get("gender", "")).strip()
                     preferred_role = "乘务" if gender in ["女", "Female", "F"] else "机务"
@@ -1392,7 +1404,7 @@ with tab1:
             if manual_crew_mode:
                 initial_rows = manual_rows
 
-            if overflow_rows and not manual_crew_mode:
+            if False:
                 overflow_desc = "、".join(f"{r['姓名']}（当前标为「{r['职务']}」）" for r in overflow_rows)
                 st.warning(f"⚠️ **本次机组共 {len(crew_list)} 人**，而模板机组区通常只有 4 行。以下人员**不会自动写入模板**：\n\n**{overflow_desc}**")
 
