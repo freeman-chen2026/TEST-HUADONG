@@ -1042,44 +1042,30 @@ with tab1:
             role = str(cr.get("职务", "")).strip()
             if role and role not in role_map: role_map[role] = cr
 
-        roles_pos = {"机长": 15, "副驾驶": 16, "乘务": 17, "机务": 18}
         _real_crew = [c for c in crew_rows if str(c.get("姓名", "")).strip() not in ("", "无")]
         _extra = max(0, len(_real_crew) - 4)
         if _extra:
             _insert_crew_rows(ws, 19, _extra, 18)
-        _order = ["机长", "副驾驶", "乘务", "机务"]
-        _by = {r: [] for r in _order}
-        for cr in crew_rows:
-            role = str(cr.get("职务", "")).strip()
-            if role in _by:
-                _by[role].append(cr)
-
-        def _write_crew_row_east(row_num, cr):
-            if cr and str(cr.get("姓名", "")).strip() not in ("", "无"):
-                name_val = str(cr.get("姓名", "")).strip()
-                safe_set_cell_value(ws, row_num, 2, name_val)
-                _style_name_cell(ws, row_num, 2, name_val)
-                safe_set_cell_value(ws, row_num, 3, cr.get("性别", ""))
-                safe_set_cell_value(ws, row_num, 4, cr.get("出生日期", ""))
-                safe_set_cell_value(ws, row_num, 5, cr.get("国籍", ""))
-                safe_set_cell_font(ws, row_num, 5, Font(name='宋体', size=16))
-                safe_set_cell_value(ws, row_num, 6, cr.get("证件号码", ""))
-                safe_set_cell_font(ws, row_num, 6, Font(name='宋体', size=16))
-                safe_set_cell_value(ws, row_num, 7, cr.get("执照号码", ""))
-                safe_set_cell_font(ws, row_num, 7, Font(name='宋体', size=12))
+        for _i in range(max(4, len(_real_crew))):
+            _row = 15 + _i
+            _cr = _real_crew[_i] if _i < len(_real_crew) else None
+            if _cr:
+                name_val = str(_cr.get("姓名", "")).strip()
+                safe_set_cell_value(ws, _row, 1, str(_cr.get("职务", "")).strip())
+                safe_set_cell_value(ws, _row, 2, name_val)
+                _style_name_cell(ws, _row, 2, name_val)
+                safe_set_cell_value(ws, _row, 3, _cr.get("性别", ""))
+                safe_set_cell_value(ws, _row, 4, _cr.get("出生日期", ""))
+                safe_set_cell_value(ws, _row, 5, _cr.get("国籍", ""))
+                safe_set_cell_font(ws, _row, 5, Font(name='宋体', size=16))
+                safe_set_cell_value(ws, _row, 6, _cr.get("证件号码", ""))
+                safe_set_cell_font(ws, _row, 6, Font(name='宋体', size=16))
+                safe_set_cell_value(ws, _row, 7, _cr.get("执照号码", ""))
+                safe_set_cell_font(ws, _row, 7, Font(name='宋体', size=12))
             else:
-                for c in range(2, 8):
-                    safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
-
-        for _role in _order:
-            _write_crew_row_east(roles_pos[_role], _by[_role][0] if _by[_role] else None)
-
-        _extras = [cr for _role in _order for cr in _by[_role][1:]]
-        for _k, _cr in enumerate(_extras):
-            if _k >= _extra:
-                break
-            _row = 19 + _k
-            _write_crew_row_east(_row, _cr)
+                safe_set_cell_value(ws, _row, 2, "无")
+                for _c in range(3, 8):
+                    safe_set_cell_value(ws, _row, _c, "")
 
         if passenger_list:
             start_row = 23 + _extra
@@ -1146,41 +1132,27 @@ with tab1:
             role = str(cr.get("职务", "")).strip()
             if role and role not in role_map: role_map[role] = cr
 
-        roles_pos = {"机长": 13, "副驾驶": 14, "乘务": 15, "机务": 16}
         _real_crew = [c for c in crew_rows if str(c.get("姓名", "")).strip() not in ("", "无")]
         _extra = max(0, len(_real_crew) - 4)
         if _extra:
             _insert_crew_rows(ws, 17, _extra, 16)
-        _order = ["机长", "副驾驶", "乘务", "机务"]
-        _by = {r: [] for r in _order}
-        for cr in crew_rows:
-            role = str(cr.get("职务", "")).strip()
-            if role in _by:
-                _by[role].append(cr)
-
-        def _write_crew_row(row_num, cr):
-            if cr and str(cr.get("姓名", "")).strip() not in ("", "无"):
-                name_text = cr.get("姓名", "")
-                safe_set_cell_value(ws, row_num, 2, name_text)
-                safe_set_cell_value(ws, row_num, 3, cr.get("性别", ""))
-                safe_set_cell_value(ws, row_num, 4, cr.get("出生日期", ""))
-                safe_set_cell_value(ws, row_num, 5, cr.get("证件号码", ""))
-                safe_set_cell_value(ws, row_num, 6, cr.get("执照号码", ""))
-                safe_set_cell_value(ws, row_num, 7, cr.get("联系方式", ""))
-                _style_name_cell(ws, row_num, 2, name_text)
+        for _i in range(max(4, len(_real_crew))):
+            _row = 13 + _i
+            _cr = _real_crew[_i] if _i < len(_real_crew) else None
+            if _cr:
+                name_text = _cr.get("姓名", "")
+                safe_set_cell_value(ws, _row, 1, str(_cr.get("职务", "")).strip())
+                safe_set_cell_value(ws, _row, 2, name_text)
+                safe_set_cell_value(ws, _row, 3, _cr.get("性别", ""))
+                safe_set_cell_value(ws, _row, 4, _cr.get("出生日期", ""))
+                safe_set_cell_value(ws, _row, 5, _cr.get("证件号码", ""))
+                safe_set_cell_value(ws, _row, 6, _cr.get("执照号码", ""))
+                safe_set_cell_value(ws, _row, 7, _cr.get("联系方式", ""))
+                _style_name_cell(ws, _row, 2, name_text)
             else:
-                for c in range(2, 8):
-                    safe_set_cell_value(ws, row_num, c, "无" if c == 2 else "")
-
-        for _role in _order:
-            _write_crew_row(roles_pos[_role], _by[_role][0] if _by[_role] else None)
-
-        _extras = [cr for _role in _order for cr in _by[_role][1:]]
-        for _k, _cr in enumerate(_extras):
-            if _k >= _extra:
-                break
-            _row = 17 + _k
-            _write_crew_row(_row, _cr)
+                safe_set_cell_value(ws, _row, 2, "无")
+                for _c in range(3, 8):
+                    safe_set_cell_value(ws, _row, _c, "")
 
         if passenger_list:
             start_row = 19 + _extra
@@ -1350,6 +1322,7 @@ with tab1:
             role_order = ["机长", "副驾驶", "乘务", "机务"]
             role_rows = {r: None for r in role_order}
             overflow_rows = []
+            ordered_rows = []
             has_unknown_nation = False
 
             for idx, crew in enumerate(crew_list):
@@ -1391,6 +1364,7 @@ with tab1:
                     "证件号码": id_val, "执照号码": lic_val,
                     "联系方式": contact, "国籍": nation,
                 }
+                ordered_rows.append(row)
                 if role_rows.get(preferred_role) is None: role_rows[preferred_role] = row
                 else: overflow_rows.append(row)
 
@@ -1400,6 +1374,9 @@ with tab1:
                 else:
                     initial_rows.append({"职务": role, "姓名": "无", "性别": "", "出生日期": "", "证件号码": "", "执照号码": "", "联系方式": "", "国籍": ""})
             initial_rows.extend(overflow_rows)
+
+            if len(crew_list) > 4 and not manual_crew_mode:
+                initial_rows = ordered_rows
 
             if manual_crew_mode:
                 initial_rows = manual_rows
