@@ -1051,6 +1051,7 @@ with tab1:
             show_cols = CREW_FILL_COLUMNS_EAST if is_east_china else CREW_FILL_COLUMNS_GENERAL
 
             data, crew_list, passenger_list = parse_general_declaration(data_file)
+
             # ===== 手动指定机组（极少数情况使用） =====
             manual_crew_mode = st.toggle(
                 "✍️ 手动指定机组（覆盖 GD 单里的机组名单）",
@@ -1058,23 +1059,23 @@ with tab1:
                 help="勾选后从内置名册里选择机组，GD 单的机组将被忽略；也可以在下方表格里直接增删改。",
             )
             if manual_crew_mode:
-                _roster_names = [r[0] for r in BUILTIN_CREW_DATA]
-                _picked = st.multiselect(
-                    "从名册选择机组（按选择顺序写入模板）",
-                    options=_roster_names,
-                    default=[],
-                    key="manual_crew_pick",
-                    help="先选的第 1 人默认机长、第 2 人副驾驶，其余按职务列手动调整。",
-                )
-                if _picked:
-                    crew_list = [
-                        {"name": n, "dob": "", "gender": "", "nationality": "",
-                         "doc_type": "", "passport_no": ""}
-                        for n in _picked
-                    ]
-                else:
-                    crew_list = []
-                    st.info("尚未选择机组：可直接在下方表格里手动添加姓名、证件号等信息。")
+                _all_names = [r[0] for r in BUILTIN_CREW_DATA]
+                _pilots = st.multiselect("飞行员（第 1 位默认机长，其余副驾驶）", options=_all_names, key="manual_pilots")
+                _cabin = st.multiselect("乘务", options=_all_names, key="manual_cabin")
+                _mech = st.multiselect("机务", options=_all_names, key="manual_mech")
+                crew_list = []
+                for _i, _n in enumerate(_pilots):
+                    crew_list.append({"name": _n, "role": "机长" if _i == 0 else "副驾驶",
+                                      "dob": "", "gender": "", "nationality": "", "doc_type": "", "passport_no": ""})
+                for _n in _cabin:
+                    crew_list.append({"name": _n, "role": "乘务",
+                                      "dob": "", "gender": "女", "nationality": "", "doc_type": "", "passport_no": ""})
+                for _n in _mech:
+                    crew_list.append({"name": _n, "role": "机务",
+                                      "dob": "", "gender": "男", "nationality": "", "doc_type": "", "passport_no": ""})
+                if not crew_list:
+                    st.info("尚未选择机组：可在下方表格里手动添加。")
+
 
             # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
             # 改动 2：统一收集"未知国籍"（机组 + 乘客），页面顶部弹警告
@@ -1124,7 +1125,9 @@ with tab1:
                         nation = "待核实"
                         has_unknown_nation = True
 
-                if idx == 0: preferred_role = "机长"
+                if manual_crew_mode and crew.get("role"):
+                    preferred_role = crew["role"]
+                elif idx == 0: preferred_role = "机长"
                 elif idx == 1: preferred_role = "副驾驶"
                 else:
                     gender = str(crew.get("gender", "")).strip()
@@ -1145,6 +1148,19 @@ with tab1:
                 else:
                     initial_rows.append({"职务": role, "姓名": "无", "性别": "", "出生日期": "", "证件号码": "", "执照号码": "", "联系方式": "", "国籍": ""})
             initial_rows.extend(overflow_rows)
+
+            if manual_crew_mode:
+                initial_rows = []
+                for _c in crew_list:
+                    _cn = extract_chinese_name(_c["name"])
+                    _id, _lic = resolve_crew_id_and_license(_c["name"], "")
+                    initial_rows.append({
+                        "职务": _c.get("role", "机务"), "姓名": _cn,
+                        "性别": _c.get("gender", ""), "出生日期": "",
+                        "证件号码": _id, "执照号码": _lic,
+                        "联系方式": find_contact(_c["name"]),
+                        "国籍": "中国" if is_18digit_id_card(_id) else "",
+                    })
 
             if overflow_rows:
                 overflow_desc = "、".join(f"{r['姓名']}（当前标为「{r['职务']}」）" for r in overflow_rows)
