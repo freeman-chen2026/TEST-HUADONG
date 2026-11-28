@@ -314,8 +314,21 @@ with tab1:
     M045|黄振龙|机务|男|2002-03-22|中国
     M046|杨哲瀚|机务|男|2000-10-02|中国
     M047|翟征宇|机务|男|1986-12-05|中国"""
-    CREW_ROSTER = [tuple(x.split("|")) for x in CREW_ROSTER_CSV.strip().splitlines()]
+    CREW_ROSTER = [tuple(part.strip() for part in x.split("|")) for x in CREW_ROSTER_CSV.strip().splitlines()]
     ROSTER_BY_ID = {r[0]: r for r in CREW_ROSTER}
+    CREW_EXTRA = {
+        "W273": {"id": "230102196606166119", "lic": "230102196606166119", "contact": "TBA"},
+        "W274": {"id": "G137689"},
+        "C059": {"id": "52222820020115002X", "lic": "52222820020115002X", "contact": "193 1190 6971"},
+        "P019": {"id": "R900255(2)"},
+        "P054": {"id": "YE609678"},
+        "P069": {"id": "C71GK63CP"},
+        "W070": {"contact": "TBA", "lic": "152123198103121536", "id": "152123198103121536"},
+        "W213": {"contact": "+852 6443 7853"},
+        "C027": {"lic": "3531206", "id": "HJ2278089"},
+        "A185": {"id": "EK9629672"},
+    }
+
 
 
     def roster_options(role):
@@ -1203,9 +1216,14 @@ with tab1:
                     r = ROSTER_BY_ID[code]
                     name = r[1]
                     idv, licv = resolve_crew_id_and_license(name, "")
+                    contact = find_contact(name)
+                    ex = CREW_EXTRA.get(code, {})
+                    idv = ex.get("id", idv)
+                    licv = ex.get("lic", licv)
+                    contact = ex.get("contact", contact)
                     return {"职务": role, "姓名": name, "性别": r[3], "出生日期": r[4],
                             "证件号码": idv, "执照号码": licv,
-                            "联系方式": find_contact(name), "国籍": r[5]}
+                            "联系方式": contact, "国籍": r[5]}
 
                 for _i, _code in enumerate(_pilots):
                     manual_rows.append(_mk_row(_code, "机长" if _i == 0 else "副驾驶"))
