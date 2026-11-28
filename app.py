@@ -192,6 +192,140 @@ with tab1:
     ]
 
     CREW_COLUMNS = ["姓名", "联系方式", "执照号码", "证件号码"]
+
+CREW_ROSTER_CSV = """P001|庚凡|飞行员|男|1979-01-18|中国
+P002|张永一|飞行员|男|1966-05-20|中国
+P003|梅峰|飞行员|男|1979-11-24|中国
+P004|王斌|飞行员|男|1979-11-05|中国
+P019|HEALY, Darran William|飞行员|男|1967-09-01|澳大利亚
+P020|BEEBE, Thaddeus John|飞行员|男|1976-03-25|美国
+P032|林毅|飞行员|男|1979-03-21|中国
+P035|Peter Robert, JACKSON|飞行员|男|1979-06-25|英国
+P036|王少雄|飞行员|男|1986-09-04|中国
+P038|苗旺旺|飞行员|男|1986-08-01|中国
+P039|Yiftah, RAUCH|飞行员|男|1981-12-15|以色列
+P044|李辛欣|飞行员|男|1986-05-02|中国
+P046|赵岩松|飞行员|男|1970-04-01|中国
+P051|彭罡|飞行员|男|1984-03-24|中国
+P052|胡君量|飞行员|男|1984-02-28|中国香港,英国
+P053|Bruce Roderick, WAINES|飞行员|男|1969-07-06|加拿大
+P054|Rodolfo, BONETTI|飞行员|男|1975-04-04|巴西,意大利
+P056|Keith Robert, SHERREN|飞行员|男|1967-11-30|加拿大
+P057|Oliver Viktor, RACZ|飞行员|男|1982-06-15|匈牙利
+P059|蔡国俊|飞行员|男|1976-03-27|中国台湾省
+P061|李庆宏|飞行员|男|1991-07-14|中国
+P065|宋炜|飞行员|男|1982-06-21|中国
+P068|昝昭君|飞行员|男|1995-02-03|中国
+P069|ROEDER, SIMONE ELKE|飞行员|女|1970-08-03|德国
+P070|Herve Daniel, STAMM|飞行员|男|1968-10-04|法国
+P071|孙浩|飞行员|男|1991-02-16|中国
+P072|朱正宇|飞行员|男|1972-07-15|中国
+P074|金尚明|飞行员|男|1975-11-03|中国
+P077|刘凯|飞行员|男|1981-03-27|中国
+P078|张帆|飞行员|男|1973-06-05|中国
+P079|魏思远|飞行员|男|1989-11-05|中国
+P080|刘爽|飞行员|男|1963-08-29|中国
+P081|吴鹏|飞行员|男|1976-02-10|中国
+P082|刘汇川|飞行员|男|1990-03-19|中国
+P083|尤欣|飞行员|男|1976-04-29|中国
+P084|李亚民|飞行员|男|1971-07-18|中国
+P085|赵镭|飞行员|男|1982-04-15|中国
+P088|马坚|飞行员|男|1966-07-08|中国
+P089|李晓龙|飞行员|男|1979-06-15|中国
+P090|黄海东|飞行员|男|1975-06-02|中国
+P091|马洪双|飞行员|男|1973-06-23|中国
+P092|Daniel, RICHTER|飞行员|男|1977-06-28|德国,南非
+PJZ001|张哲|飞行员|男|1966-04-16|中国
+PJZ002|郭春旭|飞行员|男|1973-05-15|中国
+PJZ004|王国勤|飞行员|男|1976-10-24|中国
+PJZ005|王莹|飞行员|女|1990-04-21|中国
+PJZ007|徐卓|飞行员|男|1989-06-30|中国
+W070|王彦海|飞行员|男|1981-03-12|中国
+W213|沈志伟|飞行员|男|1966-01-11|中国香港
+W267|Nathon Andrew G, NORBERG|飞行员|男|1968-06-30|美国
+W273|谭长军|飞行员|男|1966-06-16|中国
+W274|SONAM, LHAMO|飞行员|女|1982-12-21|
+C001|赵婷婷|乘务|女|1982-12-24|中国
+C012|王凯珮|乘务|女|1981-07-25|中国香港
+C016|范蕾蕾|乘务|女|1986-10-27|中国
+C020|危慧|乘务|女|1994-11-15|中国
+C023|廉卓群|乘务|女|1997-02-01|中国
+C027|曾惠敏|乘务|女|1990-12-12|中国香港
+C029|张佳妮|乘务|女|1984-01-15|中国
+C030|樊婉程|乘务|女|1996-08-18|中国
+C033|姚艳阁|乘务|女|1996-01-15|中国
+C036|李潇恩|乘务|女|1995-12-10|中国
+C038|赖小燕|乘务|女|1982-05-20|马来西亚
+C042|花佩|乘务|女|1989-11-11|中国
+C043|丁燕栒|乘务|女|1991-07-26|中国
+C046|何静文|乘务|女|1985-08-11|中国香港
+C050|蔡雨桐|乘务|女|1989-07-18|中国香港
+C051|茅邂文|乘务|女|1999-11-09|中国
+C052|张欢乐|乘务|女|1987-05-29|中国
+C053|詹佩佩|乘务|女|1988-09-27|中国
+C054|周丽欢|乘务|女|1991-01-19|中国
+C055|于龙飞|乘务|女|1988-08-12|中国
+C056|翁英|乘务|女|1988-01-18|中国
+C057|李卉妍|乘务|女|1990-07-05|中国
+C058|卢江|乘务|女|1988-09-28|中国
+C059|陈彦囡|乘务|女|2002-01-15|中国
+F026|AYA, MUGURUMA|乘务|女|1983-11-14|日本
+F034|LEE, Theng Theng|乘务|女|1969-01-01|新加坡
+F052|黄颖晶|乘务|女|1982-11-30|中国香港
+F058|张晶晶|乘务|女|1989-08-13|中国
+F059|黄茜|乘务|女|1984-03-14|中国
+A185|梁广煜|机务|男|1986-06-08|中国
+M001|李园|机务|男|1983-09-14|中国
+M002|孔铮|机务|男|1980-11-16|中国
+M004|高峰|机务|男|1980-01-17|中国
+M005|李海|机务|男|1972-01-10|中国
+M006|李阳|机务|男|1985-07-05|中国
+M007|程佳俊|机务|男|1982-08-16|中国
+M008|陈居瑜|机务|男|1979-05-03|中国
+M009|林生|机务|男|1985-12-26|中国
+M010|谢依椿|机务|男|1986-01-22|中国
+M011|廖关荣|机务|男|1990-09-09|中国
+M012|林峰|机务|男|1985-01-12|中国
+M013|丘东|机务|男|1965-04-06|中国
+M014|王庆辉|机务|男|1982-12-05|中国
+M015|姜磊|机务|男|1983-12-07|中国
+M016|黄彦杰|机务|男|1998-10-19|中国
+M017|王珍|机务|男|1996-05-28|中国
+M020|赵国庆|机务|男|2000-03-13|中国
+M021|俞凯|机务|男|1969-12-18|中国澳门
+M022|王军|机务|男|1966-10-07|中国澳门
+M023|张德桃|机务|男|1996-03-19|中国
+M024|江焰辉|机务|男|1993-07-27|中国
+M025|孙龙|机务|男|2000-10-01|中国
+M026|梁平|机务|男|1985-10-24|中国
+M027|冯仁毫|机务|男|1991-01-15|中国
+M029|焦石军|机务|男|1983-10-15|中国
+M030|万子辰|机务|男|2000-03-28|中国
+M032|卓辉|机务|男|1998-12-13|中国
+M035|万虹波|机务|男|1986-07-09|中国
+M037|王晟磊|机务|男|1984-09-26|中国
+M038|杨杰|机务|男|1984-11-30|中国
+M039|林帅|机务|男|1986-01-13|中国
+M040|苏志斌|机务|男|1983-08-22|中国
+M041|孙辉|机务|男|1978-10-01|中国
+M042|孟周聪|机务|男|1983-07-24|中国
+M043|熊立凌|机务|男|1992-03-22|中国
+M044|赵康|机务|男|2003-03-16|中国
+M045|黄振龙|机务|男|2002-03-22|中国
+M046|杨哲瀚|机务|男|2000-10-02|中国
+M047|翟征宇|机务|男|1986-12-05|中国"""
+CREW_ROSTER = [tuple(x.split("|")) for x in CREW_ROSTER_CSV.strip().splitlines()]
+ROSTER_BY_ID = {r[0]: r for r in CREW_ROSTER}
+
+
+def roster_options(role):
+    return [r[0] for r in CREW_ROSTER if r[2] == role]
+
+
+def roster_label(code):
+    r = ROSTER_BY_ID.get(code)
+    return f"{code} {r[1]}" if r else code
+
     CREW_FILL_COLUMNS_GENERAL = ["职务", "姓名", "性别", "出生日期", "证件号码", "执照号码", "联系方式"]
     CREW_FILL_COLUMNS_EAST = ["职务", "姓名", "性别", "出生日期", "国籍", "证件号码", "执照号码"]
 
@@ -1056,25 +1190,36 @@ with tab1:
             manual_crew_mode = st.toggle(
                 "✍️ 手动指定机组（覆盖 GD 单里的机组名单）",
                 value=False,
-                help="勾选后从内置名册里选择机组，GD 单的机组将被忽略；也可以在下方表格里直接增删改。",
+                help="勾选后分别从飞行员/乘务/机务名册选择，GD 单的机组将被忽略。",
             )
+            manual_rows = []
             if manual_crew_mode:
-                _all_names = [r[0] for r in BUILTIN_CREW_DATA]
-                _pilots = st.multiselect("飞行员（第 1 位默认机长，其余副驾驶）", options=_all_names, key="manual_pilots")
-                _cabin = st.multiselect("乘务", options=_all_names, key="manual_cabin")
-                _mech = st.multiselect("机务", options=_all_names, key="manual_mech")
-                crew_list = []
-                for _i, _n in enumerate(_pilots):
-                    crew_list.append({"name": _n, "role": "机长" if _i == 0 else "副驾驶",
-                                      "dob": "", "gender": "", "nationality": "", "doc_type": "", "passport_no": ""})
-                for _n in _cabin:
-                    crew_list.append({"name": _n, "role": "乘务",
-                                      "dob": "", "gender": "女", "nationality": "", "doc_type": "", "passport_no": ""})
-                for _n in _mech:
-                    crew_list.append({"name": _n, "role": "机务",
-                                      "dob": "", "gender": "男", "nationality": "", "doc_type": "", "passport_no": ""})
-                if not crew_list:
-                    st.info("尚未选择机组：可在下方表格里手动添加。")
+                _pilots = st.multiselect("飞行员（第 1 位默认机长，其余副驾驶）",
+                                         options=roster_options("飞行员"), format_func=roster_label, key="manual_pilots")
+                _cabin = st.multiselect("乘务", options=roster_options("乘务"), format_func=roster_label, key="manual_cabin")
+                _mech = st.multiselect("机务", options=roster_options("机务"), format_func=roster_label, key="manual_mech")
+
+                def _mk_row(code, role):
+                    r = ROSTER_BY_ID[code]
+                    name = r[1]
+                    idv, licv = resolve_crew_id_and_license(name, "")
+                    return {"职务": role, "姓名": name, "性别": r[3], "出生日期": r[4],
+                            "证件号码": idv, "执照号码": licv,
+                            "联系方式": find_contact(name), "国籍": r[5]}
+
+                for _i, _code in enumerate(_pilots):
+                    manual_rows.append(_mk_row(_code, "机长" if _i == 0 else "副驾驶"))
+                for _code in _cabin:
+                    manual_rows.append(_mk_row(_code, "乘务"))
+                if not _cabin:
+                    manual_rows.append({"职务": "乘务", "姓名": "无", "性别": "", "出生日期": "",
+                                        "证件号码": "", "执照号码": "", "联系方式": "", "国籍": ""})
+                for _code in _mech:
+                    manual_rows.append(_mk_row(_code, "机务"))
+                if not _mech:
+                    manual_rows.append({"职务": "机务", "姓名": "无", "性别": "", "出生日期": "",
+                                        "证件号码": "", "执照号码": "", "联系方式": "", "国籍": ""})
+                crew_list = [{"name": ROSTER_BY_ID[c][1]} for c in (_pilots + _cabin + _mech)]
 
 
             # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
@@ -1125,8 +1270,8 @@ with tab1:
                         nation = "待核实"
                         has_unknown_nation = True
 
-                if manual_crew_mode and crew.get("role"):
-                    preferred_role = crew["role"]
+                if manual_crew_mode and manual_rows:
+                    preferred_role = "副驾驶"
                 elif idx == 0: preferred_role = "机长"
                 elif idx == 1: preferred_role = "副驾驶"
                 else:
@@ -1150,19 +1295,9 @@ with tab1:
             initial_rows.extend(overflow_rows)
 
             if manual_crew_mode:
-                initial_rows = []
-                for _c in crew_list:
-                    _cn = extract_chinese_name(_c["name"])
-                    _id, _lic = resolve_crew_id_and_license(_c["name"], "")
-                    initial_rows.append({
-                        "职务": _c.get("role", "机务"), "姓名": _cn,
-                        "性别": _c.get("gender", ""), "出生日期": "",
-                        "证件号码": _id, "执照号码": _lic,
-                        "联系方式": find_contact(_c["name"]),
-                        "国籍": "中国" if is_18digit_id_card(_id) else "",
-                    })
+                initial_rows = manual_rows
 
-            if overflow_rows:
+            if overflow_rows and not manual_crew_mode:
                 overflow_desc = "、".join(f"{r['姓名']}（当前标为「{r['职务']}」）" for r in overflow_rows)
                 st.warning(f"⚠️ **本次机组共 {len(crew_list)} 人**，而模板机组区通常只有 4 行。以下人员**不会自动写入模板**：\n\n**{overflow_desc}**")
 
